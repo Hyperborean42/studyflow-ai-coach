@@ -1,15 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: StudyFlow AI API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: openai
+    description: OpenAI AI chat and audio operations
+  - name: studymaterials
+    description: Study materials and documents
+  - name: studygoals
+    description: Study goals and planning
+  - name: calendarevents
+    description: Calendar events and scheduling
+  - name: progress
+    description: Progress tracking and analytics
+  - name: notifications
+    description: Push notification settings
+  - name: settings
+    description: User settings and preferences
 paths:
   /healthz:
     get:
@@ -24,6 +37,582 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /openai/conversations:
+    get:
+      operationId: listOpenaiConversations
+      tags: [openai]
+      summary: List all conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenaiConversation"
+    post:
+      operationId: createOpenaiConversation
+      tags: [openai]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOpenaiConversationBody"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiConversation"
+  /openai/conversations/{id}:
+    get:
+      operationId: getOpenaiConversation
+      tags: [openai]
+      summary: Get conversation with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiConversationWithMessages"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiError"
+    delete:
+      operationId: deleteOpenaiConversation
+      tags: [openai]
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiError"
+  /openai/conversations/{id}/messages:
+    get:
+      operationId: listOpenaiMessages
+      tags: [openai]
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenaiMessage"
+    post:
+      operationId: sendOpenaiMessage
+      tags: [openai]
+      summary: Send a text message and receive a streaming text response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOpenaiMessageBody"
+      responses:
+        "200":
+          description: SSE stream of assistant text chunks
+          content:
+            text/event-stream: {}
+  /openai/conversations/{id}/voice-messages:
+    post:
+      operationId: sendOpenaiVoiceMessage
+      tags: [openai]
+      summary: Send audio and receive a streaming voice response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOpenaiVoiceMessageBody"
+      responses:
+        "200":
+          description: SSE stream of transcript and audio chunks
+          content:
+            text/event-stream: {}
+  /openai/transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [openai]
+      summary: Transcribe audio to text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscribeAudioBody"
+      responses:
+        "200":
+          description: Transcribed text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeAudioResponse"
+  /openai/tts:
+    post:
+      operationId: textToSpeech
+      tags: [openai]
+      summary: Convert text to speech audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TextToSpeechBody"
+      responses:
+        "200":
+          description: Base64 audio data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TextToSpeechResponse"
+
+  /study-materials:
+    get:
+      operationId: listStudyMaterials
+      tags: [studymaterials]
+      summary: List all study materials
+      responses:
+        "200":
+          description: List of study materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudyMaterial"
+    post:
+      operationId: createStudyMaterial
+      tags: [studymaterials]
+      summary: Upload and process a study material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudyMaterialBody"
+      responses:
+        "201":
+          description: Created study material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+  /study-materials/{id}:
+    get:
+      operationId: getStudyMaterial
+      tags: [studymaterials]
+      summary: Get a specific study material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Study material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+    delete:
+      operationId: deleteStudyMaterial
+      tags: [studymaterials]
+      summary: Delete a study material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /study-materials/{id}/summarize:
+    post:
+      operationId: summarizeStudyMaterial
+      tags: [studymaterials]
+      summary: Generate AI summary and notes for a study material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: SSE stream of summary
+          content:
+            text/event-stream: {}
+  /study-materials/{id}/quiz:
+    post:
+      operationId: generateQuiz
+      tags: [studymaterials]
+      summary: Generate quiz questions for a study material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateQuizBody"
+      responses:
+        "200":
+          description: Generated quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+  /study-materials/{id}/exercises:
+    post:
+      operationId: generateExercises
+      tags: [studymaterials]
+      summary: Generate extra exercises for a study material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generated exercises
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exercise"
+
+  /study-goals:
+    get:
+      operationId: listStudyGoals
+      tags: [studygoals]
+      summary: List all study goals
+      responses:
+        "200":
+          description: List of study goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudyGoal"
+    post:
+      operationId: createStudyGoal
+      tags: [studygoals]
+      summary: Create a new study goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudyGoalBody"
+      responses:
+        "201":
+          description: Created study goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyGoal"
+  /study-goals/{id}:
+    put:
+      operationId: updateStudyGoal
+      tags: [studygoals]
+      summary: Update a study goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStudyGoalBody"
+      responses:
+        "200":
+          description: Updated study goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyGoal"
+    delete:
+      operationId: deleteStudyGoal
+      tags: [studygoals]
+      summary: Delete a study goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /calendar-events:
+    get:
+      operationId: listCalendarEvents
+      tags: [calendarevents]
+      summary: List calendar events
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of calendar events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarEvent"
+    post:
+      operationId: createCalendarEvent
+      tags: [calendarevents]
+      summary: Create a calendar event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCalendarEventBody"
+      responses:
+        "201":
+          description: Created calendar event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEvent"
+  /calendar-events/{id}:
+    put:
+      operationId: updateCalendarEvent
+      tags: [calendarevents]
+      summary: Update a calendar event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCalendarEventBody"
+      responses:
+        "200":
+          description: Updated calendar event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEvent"
+    delete:
+      operationId: deleteCalendarEvent
+      tags: [calendarevents]
+      summary: Delete a calendar event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /calendar-events/reschedule-week:
+    post:
+      operationId: rescheduleWeek
+      tags: [calendarevents]
+      summary: AI reschedules week study blocks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescheduleWeekBody"
+      responses:
+        "200":
+          description: SSE stream of rescheduling updates
+          content:
+            text/event-stream: {}
+
+  /progress:
+    get:
+      operationId: getProgress
+      tags: [progress]
+      summary: Get overall study progress and stats
+      responses:
+        "200":
+          description: Progress summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressSummary"
+  /progress/weak-points:
+    get:
+      operationId: getWeakPoints
+      tags: [progress]
+      summary: Get weak points identified by AI
+      responses:
+        "200":
+          description: List of weak points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeakPoint"
+  /progress/weekly-review:
+    post:
+      operationId: generateWeeklyReview
+      tags: [progress]
+      summary: Generate weekly coaching review with AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeeklyReviewBody"
+      responses:
+        "200":
+          description: SSE stream of weekly review
+          content:
+            text/event-stream: {}
+  /progress/streak:
+    get:
+      operationId: getStudyStreak
+      tags: [progress]
+      summary: Get current study streak info
+      responses:
+        "200":
+          description: Study streak
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyStreak"
+
+  /notifications/settings:
+    get:
+      operationId: getNotificationSettings
+      tags: [notifications]
+      summary: Get notification settings
+      responses:
+        "200":
+          description: Notification settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+    put:
+      operationId: updateNotificationSettings
+      tags: [notifications]
+      summary: Update notification settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNotificationSettingsBody"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSettings"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get user settings
+      responses:
+        "200":
+          description: User settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update user settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserSettingsBody"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +623,548 @@ components:
       required:
         - status
 
+    OpenaiConversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - createdAt
+    OpenaiMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - role
+        - content
+        - createdAt
+    CreateOpenaiConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+      required:
+        - title
+    SendOpenaiMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+    SendOpenaiVoiceMessageBody:
+      type: object
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded audio data
+      required:
+        - audio
+    OpenaiConversationWithMessages:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpenaiMessage"
+      required:
+        - id
+        - title
+        - createdAt
+        - messages
+    OpenaiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    TranscribeAudioBody:
+      type: object
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded audio
+      required:
+        - audio
+    TranscribeAudioResponse:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+    TextToSpeechBody:
+      type: object
+      properties:
+        text:
+          type: string
+        voice:
+          type: string
+      required:
+        - text
+    TextToSpeechResponse:
+      type: object
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded audio
+      required:
+        - audio
+
+    StudyMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        subject:
+          type: string
+        content:
+          type: string
+        summary:
+          type: string
+        fileType:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - subject
+        - content
+        - fileType
+        - createdAt
+        - updatedAt
+    CreateStudyMaterialBody:
+      type: object
+      properties:
+        title:
+          type: string
+        subject:
+          type: string
+        content:
+          type: string
+        fileType:
+          type: string
+      required:
+        - title
+        - subject
+        - content
+        - fileType
+    GenerateQuizBody:
+      type: object
+      properties:
+        difficulty:
+          type: string
+          enum: [makkelijk, gemiddeld, moeilijk]
+        numQuestions:
+          type: integer
+      required:
+        - difficulty
+    Quiz:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialId:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizQuestion"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - materialId
+        - questions
+        - createdAt
+    QuizQuestion:
+      type: object
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        correctAnswer:
+          type: string
+        explanation:
+          type: string
+      required:
+        - question
+        - correctAnswer
+    Exercise:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialId:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        difficulty:
+          type: string
+        tip:
+          type: string
+      required:
+        - id
+        - materialId
+        - question
+        - answer
+        - difficulty
+
+    StudyGoal:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        subject:
+          type: string
+        targetDate:
+          type: string
+          format: date-time
+        hoursPerWeek:
+          type: number
+        progress:
+          type: number
+        status:
+          type: string
+          enum: [actief, voltooid, gepauzeerd]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - subject
+        - targetDate
+        - hoursPerWeek
+        - progress
+        - status
+        - createdAt
+    CreateStudyGoalBody:
+      type: object
+      properties:
+        title:
+          type: string
+        subject:
+          type: string
+        targetDate:
+          type: string
+          format: date-time
+        hoursPerWeek:
+          type: number
+      required:
+        - title
+        - subject
+        - targetDate
+        - hoursPerWeek
+    UpdateStudyGoalBody:
+      type: object
+      properties:
+        title:
+          type: string
+        subject:
+          type: string
+        targetDate:
+          type: string
+          format: date-time
+        hoursPerWeek:
+          type: number
+        progress:
+          type: number
+        status:
+          type: string
+          enum: [actief, voltooid, gepauzeerd]
+
+    CalendarEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [studie, afspraak, vrij]
+        subject:
+          type: string
+        color:
+          type: string
+        completed:
+          type: boolean
+      required:
+        - id
+        - title
+        - startTime
+        - endTime
+        - type
+        - completed
+    CreateCalendarEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [studie, afspraak, vrij]
+        subject:
+          type: string
+        color:
+          type: string
+      required:
+        - title
+        - startTime
+        - endTime
+        - type
+    UpdateCalendarEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        completed:
+          type: boolean
+    RescheduleWeekBody:
+      type: object
+      properties:
+        weekStartDate:
+          type: string
+      required:
+        - weekStartDate
+
+    ProgressSummary:
+      type: object
+      properties:
+        totalStudyHours:
+          type: number
+        weeklyHours:
+          type: number
+        completedGoals:
+          type: integer
+        totalGoals:
+          type: integer
+        completedTasks:
+          type: integer
+        totalTasks:
+          type: integer
+        averageScore:
+          type: number
+        studiedSubjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectProgress"
+      required:
+        - totalStudyHours
+        - weeklyHours
+        - completedGoals
+        - totalGoals
+        - completedTasks
+        - totalTasks
+        - averageScore
+        - studiedSubjects
+    SubjectProgress:
+      type: object
+      properties:
+        subject:
+          type: string
+        hoursStudied:
+          type: number
+        progressPercent:
+          type: number
+        score:
+          type: number
+      required:
+        - subject
+        - hoursStudied
+        - progressPercent
+        - score
+    WeakPoint:
+      type: object
+      properties:
+        id:
+          type: integer
+        subject:
+          type: string
+        topic:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [laag, gemiddeld, hoog]
+        suggestedAction:
+          type: string
+      required:
+        - id
+        - subject
+        - topic
+        - description
+        - severity
+        - suggestedAction
+    WeeklyReviewBody:
+      type: object
+      properties:
+        feedback:
+          type: string
+          description: User's own reflection text or voice-transcribed text
+      required:
+        - feedback
+    StudyStreak:
+      type: object
+      properties:
+        currentStreak:
+          type: integer
+        longestStreak:
+          type: integer
+        lastStudiedDate:
+          type: string
+          format: date-time
+        studiedToday:
+          type: boolean
+      required:
+        - currentStreak
+        - longestStreak
+        - studiedToday
+
+    NotificationSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+        enabled:
+          type: boolean
+        eveningReminder:
+          type: boolean
+        eveningReminderTime:
+          type: string
+        pushSubscription:
+          type: string
+      required:
+        - id
+        - enabled
+        - eveningReminder
+        - eveningReminderTime
+    UpdateNotificationSettingsBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        eveningReminder:
+          type: boolean
+        eveningReminderTime:
+          type: string
+        pushSubscription:
+          type: string
+
+    UserSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+        userName:
+          type: string
+        difficultyLevel:
+          type: string
+          enum: [makkelijk, gemiddeld, moeilijk]
+        preferredLanguage:
+          type: string
+        voiceEnabled:
+          type: boolean
+        coachStyle:
+          type: string
+          enum: [streng, gebalanceerd, aanmoedigend]
+        studyReminders:
+          type: boolean
+        weeklyGoalHours:
+          type: number
+      required:
+        - id
+        - userName
+        - difficultyLevel
+        - preferredLanguage
+        - voiceEnabled
+        - coachStyle
+        - studyReminders
+        - weeklyGoalHours
+    UpdateUserSettingsBody:
+      type: object
+      properties:
+        userName:
+          type: string
+        difficultyLevel:
+          type: string
+          enum: [makkelijk, gemiddeld, moeilijk]
+        preferredLanguage:
+          type: string
+        voiceEnabled:
+          type: boolean
+        coachStyle:
+          type: string
+          enum: [streng, gebalanceerd, aanmoedigend]
+        studyReminders:
+          type: boolean
+        weeklyGoalHours:
+          type: number
