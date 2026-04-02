@@ -2,9 +2,11 @@ import React from "react";
 import { Link, useLocation } from "wouter";
 import { BookOpen, Calendar, Settings, MessageCircle, Home } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const isMobile = useIsMobile();
 
   const navItems = [
     { name: "Dashboard", href: "/", icon: Home },
@@ -13,6 +15,38 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Coaching", href: "/coaching", icon: MessageCircle },
     { name: "Instellingen", href: "/instellingen", icon: Settings },
   ];
+
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-[100dvh] w-full bg-background">
+        <main className="flex-1 overflow-y-auto p-4">
+          {children}
+        </main>
+        <nav className="border-t border-border/50 bg-background safe-area-bottom">
+          <div className="flex items-center justify-around py-2">
+            {navItems.map((item) => {
+              const isActive = location === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                    isActive
+                      ? "text-primary font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                  data-testid={`nav-${item.name.toLowerCase()}`}
+                >
+                  <item.icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider>
@@ -28,8 +62,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    asChild 
+                  <SidebarMenuButton
+                    asChild
                     isActive={location === item.href}
                     tooltip={item.name}
                   >
@@ -43,7 +77,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
-        
+
         <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6">
             {children}

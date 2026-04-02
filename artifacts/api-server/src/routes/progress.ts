@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { studyGoalsTable, calendarEventsTable, weakPointsTable, studySessionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { streamClaudeResponse } from "../lib/claude";
 import { GenerateWeeklyReviewBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -70,20 +70,18 @@ router.post("/progress/weekly-review", async (req, res) => {
   const goals = await db.select().from(studyGoalsTable);
   const events = await db.select().from(calendarEventsTable);
   const completedEvents = events.filter((e) => e.completed).length;
+  const weakPoints = await db.select().from(weakPointsTable);
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  const weakPointsSummary = weakPoints.length > 0
+    ? `\nZwakke punten: ${weakPoints.map(wp => `${wp.subject} - ${wp.topic} (${wp.severity})`).join(", ")}`
+    : "";
 
-  const stream = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [
+  await streamClaudeResponse(
+    res,
+    `Je bent StudyFlow Coach, een proactieve AI-studiecoach voor HAVO 5-leerlingen. Je geeft eerlijke, motiverende wekelijkse reviews. Je kent het verschil tussen SE- en CE-voorbereiding en past je advies daarop aan. Antwoord in Nederlands.`,
+    [
       {
-        role: "system",
-        content: `Je bent StudyFlow Coach, een empathische maar strenge Nederlandse studiecoach. Geef een motiverende wekelijkse review. Antwoord in Nederlands.`,
-      },
-      {
-        role: "user",
+        role: "user" as const,
         content: `Geef een motiverende wekelijkse coaching review op basis van het volgende:
 
 Eigen reflectie van de student:
@@ -92,27 +90,18 @@ Eigen reflectie van de student:
 Statistieken:
 - Actieve studiedoelen: ${goals.filter(g => g.status === "actief").length}
 - Afgeronde taken: ${completedEvents} van de ${events.length}
-- Doelen: ${goals.map(g => `${g.title} (${g.progress}%)`).join(", ")}
+- Doelen: ${goals.map(g => `${g.title} (${g.progress}%)`).join(", ")}${weakPointsSummary}
 
 Geef:
 1. Een persoonlijke, motiverende terugkoppeling op de reflectie
-2. Concrete tips voor verbetering
+2. Concrete tips voor verbetering — koppel aan specifieke zwakke punten als die er zijn
 3. Specifieke aanpassingen voor de komende week
-4. Een bemoedigend slotwoord`,
+4. Een bemoedigend slotwoord
+
+Eindig met concrete vervolgacties: "Wil je dat ik een oefentoets maak voor [zwak punt]?" of "Zal ik je studieplan aanpassen?"`,
       },
-    ],
-    stream: true,
-  });
-
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || "";
-    if (content) {
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-    }
-  }
-
-  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
+    ]
+  );
 });
 
 router.get("/progress/streak", async (_req, res) => {
@@ -131,7 +120,7 @@ router.get("/progress/streak", async (_req, res) => {
   );
 
   let currentStreak = 0;
-  let checkDate = new Date(today);
+  const checkDate = new Date(today);
   while (studiedDates.has(checkDate.toISOString().split("T")[0])) {
     currentStreak++;
     checkDate.setDate(checkDate.getDate() - 1);

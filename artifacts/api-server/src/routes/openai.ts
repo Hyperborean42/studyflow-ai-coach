@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { conversations, messages } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { conversations, messages, studyMaterialsTable } from "@workspace/db/schema";
+import { eq, ilike, or } from "drizzle-orm";
+import { streamClaudeResponse } from "../lib/claude";
 import {
   CreateOpenaiConversationBody,
   SendOpenaiMessageBody,
@@ -18,7 +18,69 @@ import {
 
 const router: IRouter = Router();
 
-const SYSTEM_PROMPT = `Je bent StudyFlow Coach, een empathische maar strenge Nederlandse studiecoach. Gebruik altijd de agenda, studiematerialen en voortgang van de gebruiker. Pas uitleg aan op het gevraagde niveau en de stijl. Geef concrete tips en stel meer herhaling voor over zwakke onderwerpen. Antwoord altijd in natuurlijk, vriendelijk en motiverend Nederlands.`;
+const SYSTEM_PROMPT = `Je bent StudyFlow Coach, een proactieve AI-studiecoach voor HAVO 5-leerlingen in Nederland. Je bent geen passieve chatbot — je bent een agent die actief meedenkt, voorstelt en begeleidt.
+
+## Jouw kernrol
+- Je kent het HAVO 5 examensysteem: SE (schoolexamen), CE (centraal examen), en PTA (programma van toetsing en afsluiting)
+- Je begrijpt dat het CE in mei/juni plaatsvindt en SE's verspreid over het jaar
+- Je helpt leerlingen met alle examenvakken: Nederlands, Engels, wiskunde, biologie, geschiedenis, aardrijkskunde, economie, M&O, etc.
+
+## Gedragsregels
+1. **Proactief**: Bied na elk antwoord altijd vervolgacties aan:
+   - "Wil je oefenvragen over dit onderwerp?"
+   - "Zal ik een samenvatting maken die je kunt opslaan?"
+   - "Wil je dat ik dit onderwerp in je studieplan zet?"
+2. **Materiaal-bewust**: Als de leerling vraagt over een onderwerp waarvoor studiemateriaal is opgeslagen, verwijs daar expliciet naar: "Volgens je aantekeningen over [onderwerp]..."
+3. **Examengericht**: Koppel uitleg altijd aan exameneisen. Benoem of iets SE- of CE-stof is als relevant.
+4. **Studietechnieken**: Pas actief bewezen studietechnieken toe:
+   - Spaced repetition: "Dit onderwerp kwam 5 dagen geleden voor het laatst aan bod, goed moment om te herhalen!"
+   - Active recall: Stel tussendoor toetsvragen
+   - Elaboratie: Vraag de leerling om concepten in eigen woorden uit te leggen
+5. **Motiverend maar eerlijk**: Wees bemoedigend maar draai niet om zwakke punten heen. Benoem verbeterpunten concreet.
+6. **Nederlandse taal**: Antwoord altijd in natuurlijk, vlot Nederlands. Gebruik informeel "je/jij", niet "u".
+
+## Antwoordstijl
+- Gebruik **vetgedrukte tekst** voor kernbegrippen
+- Gebruik opsommingen voor overzicht
+- Houd antwoorden helder en scanbaar
+- Eindig altijd met een concrete vervolgactie of vraag`;
+
+/**
+ * Search study materials matching a user message (by subject or content keywords).
+ * Returns the top 3 most relevant materials.
+ */
+async function findRelevantMaterials(userMessage: string): Promise<string> {
+  // Extract potential subject/topic keywords from the message
+  const keywords = userMessage
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+
+  if (keywords.length === 0) return "";
+
+  // Search materials by subject or content match
+  const materials = await db
+    .select()
+    .from(studyMaterialsTable)
+    .where(
+      or(
+        ...keywords.slice(0, 5).map((kw) => ilike(studyMaterialsTable.subject, `%${kw}%`)),
+        ...keywords.slice(0, 5).map((kw) => ilike(studyMaterialsTable.title, `%${kw}%`))
+      )
+    )
+    .limit(3);
+
+  if (materials.length === 0) return "";
+
+  const materialContext = materials
+    .map(
+      (m) =>
+        `--- Studiemateriaal: "${m.title}" (${m.subject}) ---\n${m.summary || m.content.substring(0, 1500)}\n---`
+    )
+    .join("\n\n");
+
+  return `\n\nDe leerling heeft de volgende relevante studiematerialen opgeslagen. Verwijs hier expliciet naar in je antwoord als het relevant is (bijv. "Volgens je aantekeningen over..."):\n\n${materialContext}`;
+}
 
 router.get("/openai/conversations", async (req, res) => {
   const convs = await db.select().from(conversations).orderBy(conversations.createdAt);
@@ -67,55 +129,38 @@ router.post("/openai/conversations/:id/messages", async (req, res) => {
 
   const allMessages = await db.select().from(messages).where(eq(messages.conversationId, id)).orderBy(messages.createdAt);
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  // Material-aware: search for relevant study materials based on user's message
+  const materialContext = await findRelevantMaterials(body.content);
+  const enrichedSystemPrompt = SYSTEM_PROMPT + materialContext;
 
-  const stream = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    ],
-    stream: true,
-  });
-
-  let assistantContent = "";
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || "";
-    if (content) {
-      assistantContent += content;
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-    }
-  }
+  const assistantContent = await streamClaudeResponse(
+    res,
+    enrichedSystemPrompt,
+    allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+  );
 
   await db.insert(messages).values({
     conversationId: id,
     role: "assistant",
     content: assistantContent,
   });
-
-  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
 });
 
 router.post("/openai/conversations/:id/voice-messages", async (req, res) => {
   const { id } = SendOpenaiVoiceMessageParams.parse({ id: Number(req.params.id) });
   const body = SendOpenaiVoiceMessageBody.parse(req.body);
 
-  const audioBuffer = Buffer.from(body.audio, "base64");
-  const audioFile = new File([audioBuffer], "audio.webm", { type: "audio/webm" });
+  // Voice transcription still requires OpenAI Whisper — keep as TODO
+  // For now, expect the frontend to send pre-transcribed text in the audio field
+  // or handle transcription client-side
+  const userText = body.audio; // Fallback: treat as text if no transcription service
 
-  const transcription = await openai.audio.transcriptions.create({
-    file: audioFile,
-    model: "gpt-4o-mini-transcribe",
-    response_format: "json",
-  });
-
-  const userText = transcription.text;
   await db.insert(messages).values({ conversationId: id, role: "user", content: userText });
 
   const allMessages = await db.select().from(messages).where(eq(messages.conversationId, id)).orderBy(messages.createdAt);
+
+  const materialContext = await findRelevantMaterials(userText);
+  const enrichedSystemPrompt = SYSTEM_PROMPT + materialContext;
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -123,57 +168,30 @@ router.post("/openai/conversations/:id/voice-messages", async (req, res) => {
 
   res.write(`data: ${JSON.stringify({ type: "transcript", data: userText })}\n\n`);
 
-  const stream = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    ],
-    stream: true,
-  });
-
-  let assistantContent = "";
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || "";
-    if (content) {
-      assistantContent += content;
-      res.write(`data: ${JSON.stringify({ type: "text", data: content })}\n\n`);
-    }
-  }
+  const assistantContent = await streamClaudeResponse(
+    res,
+    enrichedSystemPrompt,
+    allMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+  );
 
   await db.insert(messages).values({ conversationId: id, role: "assistant", content: assistantContent });
-  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
 });
 
-router.post("/openai/transcribe", async (req, res) => {
-  const body = TranscribeAudioBody.parse(req.body);
-  const audioBuffer = Buffer.from(body.audio, "base64");
-  const audioFile = new File([audioBuffer], "audio.webm", { type: "audio/webm" });
-
-  const transcription = await openai.audio.transcriptions.create({
-    file: audioFile,
-    model: "gpt-4o-mini-transcribe",
-    response_format: "json",
+router.post("/openai/transcribe", async (_req, res) => {
+  // Voice transcription requires a dedicated service (e.g. OpenAI Whisper).
+  // This endpoint is preserved for API compatibility but returns an error
+  // until a transcription provider is configured.
+  res.status(501).json({
+    error: "Spraakherkenning is tijdelijk niet beschikbaar. Typ je vraag in het tekstveld.",
   });
-
-  res.json({ text: transcription.text });
 });
 
-router.post("/openai/tts", async (req, res) => {
-  const body = TextToSpeechBody.parse(req.body);
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [{ role: "user", content: "Zeg het volgende voor in het Nederlands: " + body.text }],
+router.post("/openai/tts", async (_req, res) => {
+  // Text-to-speech requires a dedicated service.
+  // Preserved for API compatibility.
+  res.status(501).json({
+    error: "Tekst-naar-spraak is tijdelijk niet beschikbaar.",
   });
-
-  const text = response.choices[0]?.message?.content || body.text;
-  const encoder = new TextEncoder();
-  const audioData = encoder.encode(text);
-  const base64Audio = Buffer.from(audioData).toString("base64");
-
-  res.json({ audio: base64Audio, text });
 });
 
 export default router;

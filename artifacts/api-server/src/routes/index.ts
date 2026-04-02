@@ -6,6 +6,7 @@ import studyGoalsRouter from "./studyGoals";
 import calendarEventsRouter from "./calendarEvents";
 import progressRouter from "./progress";
 import settingsRouter from "./settingsRoutes";
+import agentRouter from "./agent";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(studyGoalsRouter);
 router.use(calendarEventsRouter);
 router.use(progressRouter);
 router.use(settingsRouter);
+router.use(agentRouter);
 
 export default router;

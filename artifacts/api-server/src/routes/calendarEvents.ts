@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { calendarEventsTable, studyGoalsTable } from "@workspace/db/schema";
 import { eq, gte, lte, and } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { streamClaudeResponse } from "../lib/claude";
 import {
   CreateCalendarEventBody,
   UpdateCalendarEventParams,
@@ -81,44 +81,29 @@ router.post("/calendar-events/reschedule-week", async (req, res) => {
       lte(calendarEventsTable.endTime, weekEnd)
     ));
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  const stream = await openai.chat.completions.create({
-    model: "gpt-5",
-    messages: [
+  await streamClaudeResponse(
+    res,
+    `Je bent StudyFlow Coach, een proactieve AI-studiecoach voor HAVO 5-leerlingen. Je maakt realistische studieplanning rekening houdend met SE- en CE-periodes. Antwoord altijd in Nederlands.`,
+    [
       {
-        role: "system",
-        content: `Je bent StudyFlow Coach, een empathische maar strenge Nederlandse studiecoach. Antwoord altijd in Nederlands.`,
-      },
-      {
-        role: "user",
-        content: `Analyseer de volgende studiedoelen en plan een optimale studieweek. Geef concrete aanbevelingen voor studieblokken.
+        role: "user" as const,
+        content: `Analyseer de volgende studiedoelen en plan een optimale studieweek. Geef concrete aanbevelingen voor studieblokken. Houd rekening met:
+- Spaced repetition: wissel vakken af, herhaal moeilijke stof vaker
+- Actief leren: stel voor wanneer de leerling moet oefenen vs. samenvatten
+- Energie-management: zwaardere vakken eerder op de dag
 
 Studiedoelen:
 ${goals.map(g => `- ${g.title} (${g.subject}): ${g.hoursPerWeek} uur/week, voortgang: ${g.progress}%`).join("\n")}
 
 Bestaande afspraken deze week:
-${existingEvents.map(e => `- ${e.title}: ${e.startTime.toLocaleString("nl-NL")} - ${e.endTime.toLocaleString("nl-NL")}`).join("\n")}
+${existingEvents.map(e => `- ${e.title}: ${e.startTime.toLocaleString("nl-NL")} - ${e.endTime.toLocaleString("nl-NL")}`).join("\n") || "Geen bestaande afspraken"}
 
 Week van: ${weekStart.toLocaleDateString("nl-NL")}
 
 Geef per dag (ma-zo) concrete studieblokken van 1-2 uur met het vak. Wees motiverend en realistisch.`,
       },
-    ],
-    stream: true,
-  });
-
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || "";
-    if (content) {
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-    }
-  }
-
-  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
+    ]
+  );
 });
 
 export default router;

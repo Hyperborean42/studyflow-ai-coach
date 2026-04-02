@@ -1,20 +1,22 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation, useSearch } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, FileUp, ListChecks, BrainCircuit, Loader2, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FileText, FileUp, ListChecks, BrainCircuit, Loader2, CheckCircle2, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  useListStudyMaterials, 
+import {
+  useListStudyMaterials,
   useCreateStudyMaterial,
   useGenerateQuiz,
   useGenerateExercises
@@ -26,16 +28,24 @@ const uploadSchema = z.object({
   subject: z.string().min(1, "Vak is verplicht"),
   content: z.string().min(10, "Inhoud moet minimaal 10 karakters bevatten"),
   fileType: z.string().default("tekst"),
+  chapter: z.string().optional(),
+  examType: z.string().optional(),
+  tags: z.string().optional(),
 });
 
 export default function Materialen() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("upload");
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  const initialTab = searchParams.get("tab") || "upload";
+
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [summary, setSummary] = useState("");
-  const [quizData, setQuizData] = useState<any>(null);
-  
+  const [quizData, setQuizData] = useState<{ questions: Array<{ question: string; options?: string[]; correctAnswer: string; explanation?: string }> } | null>(null);
+
   const { data: materials = [], refetch: refetchMaterials } = useListStudyMaterials();
   const createMaterial = useCreateStudyMaterial();
   const generateQuiz = useGenerateQuiz();
@@ -48,6 +58,9 @@ export default function Materialen() {
       subject: "",
       content: "",
       fileType: "tekst",
+      chapter: "",
+      examType: "",
+      tags: "",
     },
   });
 
@@ -68,10 +81,10 @@ export default function Materialen() {
 
   const handleSummarize = async () => {
     if (!activeMaterialId) return;
-    
+
     setIsSummarizing(true);
     setSummary("");
-    
+
     try {
       await streamOpenAiResponse(
         `api/materials/${activeMaterialId}/summarize`,
@@ -90,10 +103,10 @@ export default function Materialen() {
 
   const handleGenerateQuiz = (difficulty: 'makkelijk' | 'gemiddeld' | 'moeilijk') => {
     if (!activeMaterialId) return;
-    
-    generateQuiz.mutate({ 
-      id: activeMaterialId, 
-      data: { difficulty, numQuestions: 5 } 
+
+    generateQuiz.mutate({
+      id: activeMaterialId,
+      data: { difficulty, numQuestions: 5 }
     }, {
       onSuccess: (data) => {
         setQuizData(data);
@@ -106,7 +119,12 @@ export default function Materialen() {
     });
   };
 
-  const activeMaterial = materials.find(m => m.id === activeMaterialId);
+  const handleChatAboutMaterial = (title: string) => {
+    const chatMessage = encodeURIComponent(`Leg ${title} uit en stel me er vragen over`);
+    navigate(`/?chat=${chatMessage}`);
+  };
+
+  const activeMaterial = materials.find((m: { id: number }) => m.id === activeMaterialId);
 
   return (
     <div className="h-full flex flex-col space-y-6">
@@ -123,8 +141,8 @@ export default function Materialen() {
           </CardHeader>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              <Button 
-                variant={activeTab === "upload" ? "secondary" : "ghost"} 
+              <Button
+                variant={activeTab === "upload" ? "secondary" : "ghost"}
                 className="w-full justify-start"
                 onClick={() => setActiveTab("upload")}
               >
@@ -132,20 +150,30 @@ export default function Materialen() {
               </Button>
               <div className="py-2">
                 <div className="text-xs font-medium text-muted-foreground px-3 mb-2">RECENT</div>
-                {materials.map(material => (
-                  <Button
-                    key={material.id}
-                    variant={activeMaterialId === material.id && activeTab !== "upload" ? "secondary" : "ghost"}
-                    className="w-full justify-start text-sm font-normal truncate"
-                    onClick={() => {
-                      setActiveMaterialId(material.id);
-                      setSummary(material.summary || "");
-                      setActiveTab("verwerken");
-                    }}
-                  >
-                    <FileText className="mr-2 h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{material.title}</span>
-                  </Button>
+                {materials.map((material: { id: number; title: string; summary?: string; subject?: string }) => (
+                  <div key={material.id} className="flex items-center gap-1">
+                    <Button
+                      variant={activeMaterialId === material.id && activeTab !== "upload" ? "secondary" : "ghost"}
+                      className="flex-1 justify-start text-sm font-normal truncate"
+                      onClick={() => {
+                        setActiveMaterialId(material.id);
+                        setSummary(material.summary || "");
+                        setActiveTab("verwerken");
+                      }}
+                    >
+                      <FileText className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{material.title}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 flex-shrink-0"
+                      title="Chat over dit materiaal"
+                      onClick={() => handleChatAboutMaterial(material.title)}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -196,7 +224,65 @@ export default function Materialen() {
                           )}
                         />
                       </div>
-                      
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={uploadForm.control}
+                          name="chapter"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hoofdstuk (optioneel)</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Bijv. Hoofdstuk 3" {...field} />
+                              </FormControl>
+                              <FormDescription className="text-xs">
+                                Welk hoofdstuk of paragraaf?
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={uploadForm.control}
+                          name="examType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Type toets</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecteer type..." />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="se">SE (Schoolexamen)</SelectItem>
+                                  <SelectItem value="ce">CE (Centraal Examen)</SelectItem>
+                                  <SelectItem value="beide">Beide</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={uploadForm.control}
+                        name="tags"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Onderwerp-tags (optioneel)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Bijv. mitose, meiose, celcyclus" {...field} />
+                            </FormControl>
+                            <FormDescription className="text-xs">
+                              Komma-gescheiden trefwoorden voor dit materiaal.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       <FormField
                         control={uploadForm.control}
                         name="content"
@@ -204,20 +290,20 @@ export default function Materialen() {
                           <FormItem>
                             <FormLabel>Tekst of Notities</FormLabel>
                             <FormControl>
-                              <Textarea 
-                                placeholder="Plak hier je lesstof, samenvatting of notities..." 
-                                className="min-h-[300px] resize-y" 
-                                {...field} 
+                              <Textarea
+                                placeholder="Plak hier je lesstof, samenvatting of notities..."
+                                className="min-h-[250px] resize-y"
+                                {...field}
                               />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      
+
                       <Button type="submit" className="w-full" disabled={createMaterial.isPending}>
                         {createMaterial.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Opslaan & Verwerken
+                        Opslaan &amp; Verwerken
                       </Button>
                     </form>
                   </Form>
@@ -227,9 +313,19 @@ export default function Materialen() {
               <TabsContent value="verwerken" className="m-0">
                 {activeMaterial && (
                   <div className="space-y-6">
-                    <div>
-                      <h2 className="text-2xl font-bold">{activeMaterial.title}</h2>
-                      <p className="text-muted-foreground">{activeMaterial.subject}</p>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold">{activeMaterial.title}</h2>
+                        <p className="text-muted-foreground">{activeMaterial.subject}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleChatAboutMaterial(activeMaterial.title)}
+                      >
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Chat over dit materiaal
+                      </Button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -243,7 +339,7 @@ export default function Materialen() {
                         <CardContent>
                           {summary || activeMaterial.summary ? (
                             <div className="prose prose-sm dark:prose-invert max-w-none">
-                              <div dangerouslySetInnerHTML={{ __html: summary || activeMaterial.summary || "" }} />
+                              <div>{summary || activeMaterial.summary || ""}</div>
                             </div>
                           ) : (
                             <div className="text-center py-8">
@@ -266,7 +362,7 @@ export default function Materialen() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <p className="text-sm text-muted-foreground">Genereer oefenvragen gebaseerd op deze tekst om je kennis te testen.</p>
-                          
+
                           <div className="space-y-3 pt-4 border-t">
                             <Button variant="outline" className="w-full justify-between" onClick={() => handleGenerateQuiz('makkelijk')} disabled={generateQuiz.isPending}>
                               Makkelijk (Begrippen)
@@ -295,7 +391,7 @@ export default function Materialen() {
                     </div>
 
                     <Accordion type="single" collapsible className="w-full">
-                      {quizData.questions.map((q: any, idx: number) => (
+                      {quizData.questions.map((q, idx) => (
                         <AccordionItem value={`q-${idx}`} key={idx}>
                           <AccordionTrigger className="text-left font-medium">
                             <span className="flex gap-3">
@@ -311,7 +407,7 @@ export default function Materialen() {
                                 ))}
                               </div>
                             ) : null}
-                            
+
                             <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-primary/20">
                               <h5 className="font-semibold text-primary flex items-center gap-2 mb-2">
                                 <CheckCircle2 className="h-4 w-4" /> Antwoord

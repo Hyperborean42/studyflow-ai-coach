@@ -9,6 +9,9 @@ export const studyMaterialsTable = pgTable("study_materials", {
   content: text("content").notNull(),
   summary: text("summary"),
   fileType: text("file_type").notNull().default("tekst"),
+  chapter: text("chapter"),
+  examType: text("exam_type"),
+  tags: text("tags"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
