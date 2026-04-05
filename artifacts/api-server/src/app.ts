@@ -37,8 +37,8 @@ app.use("/api", router);
 const publicDir = path.resolve(process.cwd(), "public");
 if (existsSync(publicDir)) {
   app.use(express.static(publicDir));
-  // SPA fallback: serve index.html for all non-API routes
-  app.get("*", (_req, res) => {
+  // SPA fallback: serve index.html for all non-API routes (Express 5 syntax)
+  app.get("/{*path}", (_req, res) => {
     res.sendFile(path.join(publicDir, "index.html"));
   });
 }
