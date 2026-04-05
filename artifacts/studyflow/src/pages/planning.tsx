@@ -18,6 +18,7 @@ import {
   Loader2, Plus, Sparkles, Target, Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SpeechButton } from "@/components/speech-button";
 import {
   useListCalendarEvents,
   useCreateCalendarEvent,
@@ -231,7 +232,12 @@ export default function Planning() {
                   <FormField control={eventForm.control} name="title" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Titel</FormLabel>
-                      <FormControl><Input placeholder="Bijv. Wiskunde toets H3" {...field} /></FormControl>
+                      <FormControl>
+                        <div className="flex gap-2">
+                          <Input placeholder="Bijv. Wiskunde toets H3" {...field} />
+                          <SpeechButton onTranscript={(t) => field.onChange(field.value ? field.value + " " + t : t)} />
+                        </div>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -427,7 +433,12 @@ export default function Planning() {
                         <FormField control={goalForm.control} name="title" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Wat is je doel?</FormLabel>
-                            <FormControl><Input placeholder="Bijv. Alle stof voor tentamen kennen" {...field} /></FormControl>
+                            <FormControl>
+                              <div className="flex gap-2">
+                                <Input placeholder="Bijv. Alle stof voor tentamen kennen" {...field} />
+                                <SpeechButton onTranscript={(t) => field.onChange(field.value ? field.value + " " + t : t)} />
+                              </div>
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )} />

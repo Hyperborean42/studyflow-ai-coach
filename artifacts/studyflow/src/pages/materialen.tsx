@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FileText, FileUp, ListChecks, BrainCircuit, Loader2, CheckCircle2, MessageSquare, ArrowRight, RotateCcw, Target, Trophy, XCircle, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SpeechButton } from "@/components/speech-button";
+import { SlideViewer } from "@/components/slide-viewer";
 import { cn } from "@/lib/utils";
 import {
   useListStudyMaterials,
@@ -53,6 +55,7 @@ export default function Materialen() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [slideViewerOpen, setSlideViewerOpen] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<number, { selectedAnswer: string; isCorrect: boolean }>>({});
   const [showQuizResults, setShowQuizResults] = useState(false);
@@ -264,6 +267,17 @@ export default function Materialen() {
 
   return (
     <div className="h-full flex flex-col space-y-6">
+      {/* Slide Viewer (fullscreen overlay) */}
+      {activeMaterial && (
+        <SlideViewer
+          content={activeMaterial.content}
+          title={activeMaterial.title}
+          subject={activeMaterial.subject}
+          open={slideViewerOpen}
+          onClose={() => setSlideViewerOpen(false)}
+        />
+      )}
+
       <header>
         <h1 className="text-3xl font-bold text-foreground">Studiemateriaal</h1>
         <p className="text-muted-foreground mt-1">Upload lesstof, bekijk samenvattingen en genereer oefeningen.</p>
@@ -416,7 +430,10 @@ export default function Materialen() {
                             <FormItem>
                               <FormLabel>Titel</FormLabel>
                               <FormControl>
-                                <Input placeholder="Bijv. Hoofdstuk 3: Celdeling" {...field} />
+                                <div className="flex gap-2">
+                                  <Input placeholder="Bijv. Hoofdstuk 3: Celdeling" {...field} />
+                                  <SpeechButton onTranscript={(t) => field.onChange(field.value ? field.value + " " + t : t)} />
+                                </div>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -500,10 +517,16 @@ export default function Materialen() {
                         name="content"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Tekst of Notities</FormLabel>
+                            <FormLabel className="flex items-center justify-between">
+                              Tekst of Notities
+                              <SpeechButton
+                                size="sm"
+                                onTranscript={(t) => field.onChange(field.value ? field.value + " " + t : t)}
+                              />
+                            </FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="Plak hier je lesstof, samenvatting of notities..."
+                                placeholder="Plak hier je lesstof, samenvatting of notities... of spreek in via de microfoon."
                                 className="min-h-[250px] resize-y"
                                 {...field}
                               />
@@ -530,14 +553,26 @@ export default function Materialen() {
                         <h2 className="text-2xl font-bold">{activeMaterial.title}</h2>
                         <p className="text-muted-foreground">{activeMaterial.subject}</p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChatAboutMaterial(activeMaterial.title)}
-                      >
-                        <MessageSquare className="mr-2 h-4 w-4" />
-                        Chat over dit materiaal
-                      </Button>
+                      <div className="flex gap-2">
+                        {activeMaterial.fileType === "pptx" && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => setSlideViewerOpen(true)}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Presenteren
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleChatAboutMaterial(activeMaterial.title)}
+                        >
+                          <MessageSquare className="mr-2 h-4 w-4" />
+                          Chat
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

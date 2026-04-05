@@ -17,12 +17,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  Send, Lightbulb, Loader2, Sparkles,
+  Send, Lightbulb, Loader2, Sparkles, Maximize2,
   MessageSquare, ArrowRight, AlertTriangle, Clock,
   Flame, Target, GraduationCap, ChevronRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SpeechButton } from "@/components/speech-button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -124,6 +126,7 @@ export default function Dashboard() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [coachExpanded, setCoachExpanded] = useState(false);
 
   const { data: conversations = [] } = useListOpenaiConversations();
   const createConversation = useCreateOpenaiConversation();
@@ -415,10 +418,15 @@ export default function Dashboard() {
   const miniCoach = (
     <Card className={`flex flex-col overflow-hidden border-primary/20 ${isMobile ? "flex-1 min-h-[300px]" : "h-full"}`}>
       <CardHeader className="pb-2 bg-primary/5 border-b">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-primary" />
-          AI Studiecoach
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-primary" />
+            AI Studiecoach
+          </CardTitle>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCoachExpanded(true)}>
+            <Maximize2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
         <CardDescription className="text-xs">Stel vragen, vraag om uitleg of oefen je stof.</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
@@ -478,6 +486,11 @@ export default function Dashboard() {
                 }
               }}
             />
+            <SpeechButton
+              onTranscript={(t) => setMessage((prev) => prev ? prev + " " + t : t)}
+              disabled={isTyping}
+              className="h-[44px] w-[44px] shrink-0"
+            />
             <Button
               size="icon"
               className="h-[44px] w-[44px] shrink-0"
@@ -522,11 +535,96 @@ export default function Dashboard() {
     </Card>
   ) : null;
 
-  // ─── Layout ───��────────────────────────────���────────────────────────────
+  // Expanded coach Sheet (fullscreen chat)
+  const expandedCoach = (
+    <Sheet open={coachExpanded} onOpenChange={setCoachExpanded}>
+      <SheetContent side="bottom" className="h-[95dvh] flex flex-col p-0">
+        <SheetHeader className="px-4 pt-4 pb-2 border-b bg-primary/5">
+          <SheetTitle className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-primary" />
+            AI Studiecoach
+          </SheetTitle>
+        </SheetHeader>
+        <ScrollArea className="flex-1 p-4">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-8">
+              <MessageSquare className="h-12 w-12 text-muted-foreground/20 mb-4" />
+              <p>Start een gesprek met je coach.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 pb-4">
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] p-3 rounded-lg ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-tr-none"
+                      : "bg-muted/50 border rounded-tl-none"
+                  }`}>
+                    {msg.role === "assistant" && !msg.content ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
+        <div className="p-4 border-t bg-background space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {quickActions.map((action) => (
+              <Button
+                key={action}
+                variant="outline"
+                size="sm"
+                className="text-xs h-7 rounded-full"
+                onClick={() => handleSendMessage(action)}
+                disabled={isTyping}
+              >
+                {action}
+              </Button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-end">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Typ je bericht..."
+              className="min-h-[60px] resize-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+            />
+            <div className="flex flex-col gap-2">
+              <SpeechButton
+                onTranscript={(t) => setMessage((prev) => prev ? prev + " " + t : t)}
+                disabled={isTyping}
+              />
+              <Button
+                size="icon"
+                onClick={() => handleSendMessage()}
+                disabled={isTyping || !message.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+
+  // ─── Layout ─────────────────────────────────────────────────────────
 
   if (isMobile) {
     return (
       <div className="h-full flex flex-col space-y-4">
+        {expandedCoach}
         <header>
           <h1 className="text-2xl font-bold">Welkom terug!</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
@@ -546,6 +644,7 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col space-y-5">
+      {expandedCoach}
       <header>
         <h1 className="text-3xl font-bold">Welkom terug!</h1>
         <p className="text-muted-foreground mt-0.5">
