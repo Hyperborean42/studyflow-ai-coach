@@ -933,7 +933,7 @@ components:
           format: date-time
         type:
           type: string
-          enum: [studie, afspraak, vrij]
+          enum: [studie, toets, examen, afspraak, vrij]
         subject:
           type: string
         color:
@@ -962,7 +962,7 @@ components:
           format: date-time
         type:
           type: string
-          enum: [studie, afspraak, vrij]
+          enum: [studie, toets, examen, afspraak, vrij]
         subject:
           type: string
         color:

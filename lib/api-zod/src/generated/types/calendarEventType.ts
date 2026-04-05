@@ -11,6 +11,8 @@ export type CalendarEventType =
 
 export const CalendarEventType = {
   studie: "studie",
+  toets: "toets",
+  examen: "examen",
   afspraak: "afspraak",
   vrij: "vrij",
 } as const;

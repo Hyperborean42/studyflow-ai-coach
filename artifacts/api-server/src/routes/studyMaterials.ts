@@ -12,8 +12,65 @@ import {
   GenerateQuizBody,
   GenerateExercisesParams,
 } from "@workspace/api-zod";
+import multer from "multer";
+import AdmZip from "adm-zip";
 
 const router: IRouter = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+/**
+ * Extract text content from uploaded file buffer.
+ * Supports: .pptx, .docx, .txt, .md
+ */
+function extractTextFromFile(buffer: Buffer, filename: string): string {
+  const ext = filename.toLowerCase().split(".").pop() || "";
+
+  if (ext === "pptx") {
+    return extractPptxText(buffer);
+  }
+  if (ext === "docx") {
+    return extractDocxText(buffer);
+  }
+  // Plain text / markdown
+  return buffer.toString("utf-8");
+}
+
+function extractPptxText(buffer: Buffer): string {
+  const zip = new AdmZip(buffer);
+  const entries = zip.getEntries();
+  const slideTexts: string[] = [];
+
+  // Sort slide entries by slide number
+  const slideEntries = entries
+    .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
+    .sort((a, b) => {
+      const numA = parseInt(a.entryName.match(/slide(\d+)/)?.[1] || "0");
+      const numB = parseInt(b.entryName.match(/slide(\d+)/)?.[1] || "0");
+      return numA - numB;
+    });
+
+  for (const entry of slideEntries) {
+    const xml = entry.getData().toString("utf-8");
+    // Extract text from <a:t> tags (PowerPoint text runs)
+    const texts = [...xml.matchAll(/<a:t[^>]*>([^<]+)<\/a:t>/g)].map((m) => m[1]);
+    if (texts.length > 0) {
+      const slideNum = entry.entryName.match(/slide(\d+)/)?.[1] || "?";
+      slideTexts.push(`[Slide ${slideNum}]\n${texts.join(" ")}`);
+    }
+  }
+
+  return slideTexts.join("\n\n");
+}
+
+function extractDocxText(buffer: Buffer): string {
+  const zip = new AdmZip(buffer);
+  const docEntry = zip.getEntry("word/document.xml");
+  if (!docEntry) return "";
+  const xml = docEntry.getData().toString("utf-8");
+  // Extract text from <w:t> tags
+  const texts = [...xml.matchAll(/<w:t[^>]*>([^<]+)<\/w:t>/g)].map((m) => m[1]);
+  return texts.join(" ");
+}
 
 const SYSTEM_PROMPT = `Je bent StudyFlow Coach, een proactieve AI-studiecoach voor HAVO 5-leerlingen. Je helpt met studiemateriaal door heldere samenvattingen te maken, quizvragen te genereren en oefeningen te ontwerpen die aansluiten bij het SE/CE-niveau.
 
@@ -44,6 +101,50 @@ router.post("/study-materials", async (req, res) => {
   if ("tags" in body && body.tags) values.tags = body.tags;
 
   const [material] = await db.insert(studyMaterialsTable).values(values as typeof studyMaterialsTable.$inferInsert).returning();
+  res.status(201).json(material);
+});
+
+// ─── File Upload ────────────────────────────────────────────────────────────
+router.post("/study-materials/upload", upload.single("file"), async (req, res) => {
+  const file = (req as any).file;
+  if (!file) {
+    res.status(400).json({ error: "Geen bestand geüpload" });
+    return;
+  }
+
+  const title = req.body.title || file.originalname.replace(/\.[^.]+$/, "");
+  const subject = req.body.subject || "Onbekend";
+  const chapter = req.body.chapter || null;
+  const examType = req.body.examType || null;
+  const tags = req.body.tags || null;
+
+  let content: string;
+  try {
+    content = extractTextFromFile(file.buffer, file.originalname);
+  } catch (err) {
+    res.status(422).json({ error: "Kon tekst niet uit bestand halen. Probeer een .pptx, .docx of .txt bestand." });
+    return;
+  }
+
+  if (!content.trim()) {
+    res.status(422).json({ error: "Geen tekst gevonden in het bestand." });
+    return;
+  }
+
+  const [material] = await db
+    .insert(studyMaterialsTable)
+    .values({
+      title,
+      subject,
+      content,
+      fileType: file.originalname.split(".").pop() || "bestand",
+      chapter,
+      examType,
+      tags,
+      updatedAt: new Date(),
+    })
+    .returning();
+
   res.status(201).json(material);
 });
 

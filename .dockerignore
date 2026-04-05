@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.cache
+.local
+.expo
+*.tsbuildinfo
+.DS_Store
+.replit
+.agents

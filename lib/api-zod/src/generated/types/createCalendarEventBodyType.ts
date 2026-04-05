@@ -11,6 +11,8 @@ export type CreateCalendarEventBodyType =
 
 export const CreateCalendarEventBodyType = {
   studie: "studie",
+  toets: "toets",
+  examen: "examen",
   afspraak: "afspraak",
   vrij: "vrij",
 } as const;

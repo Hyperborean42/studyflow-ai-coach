@@ -1,144 +1,279 @@
-import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import React, { useState, useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, Send, Loader2, Sparkles, HeartHandshake } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Mic, Send, Loader2, Sparkles, Lightbulb, MessageSquare,
+  BookOpen, CalendarDays, BrainCircuit, RotateCcw,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useCreateOpenaiConversation,
+  useListOpenaiConversations,
+  useListOpenaiMessages,
+} from "@workspace/api-client-react";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
 
 export default function Coaching() {
   const { toast } = useToast();
-  const [reviewText, setReviewText] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [coachResponse, setCoachResponse] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: conversations = [], refetch: refetchConversations } = useListOpenaiConversations();
+  const createConversation = useCreateOpenaiConversation();
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+
+  const { data: historyMessages = [] } = useListOpenaiMessages(activeConversationId || 0, {
+    query: { enabled: !!activeConversationId },
+  });
+
+  useEffect(() => {
+    if (historyMessages.length > 0) {
+      setMessages(historyMessages.map((m) => ({ role: m.role, content: m.content })));
+    } else if (activeConversationId) {
+      setMessages([]);
+    }
+  }, [historyMessages, activeConversationId]);
+
+  useEffect(() => {
+    if (conversations.length > 0 && !activeConversationId) {
+      setActiveConversationId(conversations[0].id);
+    } else if (conversations.length === 0 && !activeConversationId) {
+      createConversation.mutate(
+        { data: { title: "Studiecoach" } },
+        { onSuccess: (data) => setActiveConversationId(data.id) },
+      );
+    }
+  }, [conversations, activeConversationId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSendMessage = async (text: string = message) => {
+    if (!text.trim() || !activeConversationId) return;
+
+    const userMsg = text;
+    setMessage("");
+    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setIsTyping(true);
+
+    let aiResponse = "";
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+    try {
+      await streamOpenAiResponse(
+        `api/openai/conversations/${activeConversationId}/messages`,
+        { content: userMsg },
+        (chunk) => {
+          aiResponse += chunk;
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1].content = aiResponse;
+            return newMessages;
+          });
+        },
+      );
+    } catch {
+      toast({ title: "Fout", description: "Kon bericht niet verzenden", variant: "destructive" });
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const handleNewConversation = () => {
+    createConversation.mutate(
+      { data: { title: `Coach ${new Date().toLocaleDateString("nl-NL")}` } },
+      {
+        onSuccess: (data) => {
+          setActiveConversationId(data.id);
+          setMessages([]);
+          refetchConversations();
+        },
+      },
+    );
+  };
 
   const toggleRecording = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast({ title: "Niet ondersteund", description: "Spraakherkenning wordt niet ondersteund in deze browser.", variant: "destructive" });
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      toast({ title: "Niet ondersteund", description: "Spraakherkenning wordt niet ondersteund.", variant: "destructive" });
       return;
     }
-    
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    const SpeechRecognition = window.SpeechRecognition || (window as unknown as { webkitSpeechRecognition: typeof window.SpeechRecognition }).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = 'nl-NL';
-    
+    recognition.lang = "nl-NL";
+
     if (isRecording) {
       setIsRecording(false);
       recognition.stop();
       return;
     }
-    
+
     setIsRecording(true);
     recognition.start();
-    
-    recognition.onresult = (event: any) => {
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       const transcript = event.results[0][0].transcript;
-      setReviewText(prev => prev + (prev ? " " : "") + transcript);
+      setMessage((prev) => prev + " " + transcript);
       setIsRecording(false);
     };
-    
+
     recognition.onerror = () => {
       setIsRecording(false);
       toast({ title: "Fout", description: "Spraakherkenning mislukt.", variant: "destructive" });
     };
-    
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+
+    recognition.onend = () => setIsRecording(false);
   };
 
-  const handleSubmit = async () => {
-    if (!reviewText.trim()) return;
-    
-    setIsSubmitting(true);
-    setCoachResponse("");
-    
-    try {
-      await streamOpenAiResponse(
-        `api/coaching/weekly-review`,
-        { feedback: reviewText },
-        (chunk) => {
-          setCoachResponse(prev => prev + chunk);
-        }
-      );
-      toast({ title: "Review verwerkt", description: "Je coach heeft gereageerd." });
-    } catch (error) {
-      toast({ title: "Fout", description: "Kon review niet verwerken.", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const quickActions = [
+    { label: "Overhoor mij", icon: BrainCircuit, msg: "Overhoor mij over de stof die ik heb geüpload" },
+    { label: "Plan mijn week", icon: CalendarDays, msg: "Help me mijn studieweek te plannen op basis van mijn toetsen en doelen" },
+    { label: "Leg uit", icon: BookOpen, msg: "Leg mij het laatste onderwerp uit dat ik heb bestudeerd" },
+    { label: "Reflectie", icon: Sparkles, msg: "Ik wil een wekelijkse reflectie doen. Hoe ging mijn studieweek?" },
+    { label: "Genereer quiz", icon: BrainCircuit, msg: "Maak een quiz van 5 vragen over mijn studiemateriaal" },
+    { label: "Studietips", icon: Lightbulb, msg: "Geef me gepersonaliseerde studietips op basis van mijn zwakke punten" },
+  ];
 
   return (
-    <div className="h-full flex flex-col space-y-6 max-w-4xl mx-auto w-full">
-      <header className="text-center mb-4">
-        <h1 className="text-3xl font-bold text-foreground">Wekelijkse Reflectie</h1>
-        <p className="text-muted-foreground mt-2">Neem even de tijd om terug te kijken op je studieweek. Jouw AI coach helpt je te verbeteren.</p>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <header className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Lightbulb className="h-7 w-7 text-primary" />
+            AI Studiecoach
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Je persoonlijke coach die je materiaal kent, je planning begrijpt, en je helpt studeren.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {conversations.length > 1 && (
+            <select
+              className="text-sm border rounded-md px-2 py-1 bg-background"
+              value={activeConversationId || ""}
+              onChange={(e) => {
+                setActiveConversationId(Number(e.target.value));
+                setMessages([]);
+              }}
+            >
+              {conversations.map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+          )}
+          <Button variant="outline" size="sm" onClick={handleNewConversation}>
+            <RotateCcw className="h-4 w-4 mr-1" /> Nieuw gesprek
+          </Button>
+        </div>
       </header>
 
-      <Card className="border-primary/20 shadow-sm">
-        <CardHeader className="bg-primary/5 pb-4 border-b">
-          <CardTitle className="text-xl flex items-center gap-2">
-            <HeartHandshake className="h-5 w-5 text-primary" />
-            Hoe ging het deze week?
-          </CardTitle>
-          <CardDescription>
-            Deel wat goed ging, waar je tegenaan liep en hoe je je voelde. Je kunt typen of inspreken.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Textarea 
-              value={reviewText}
-              onChange={e => setReviewText(e.target.value)}
-              placeholder="Deze week vond ik wiskunde lastig omdat... maar geschiedenis ging super goed. Ik was wel vaak moe in de avond..."
-              className="min-h-[150px] resize-y pb-12 text-base"
-              disabled={isSubmitting}
-            />
-            <div className="absolute bottom-3 right-3 flex gap-2">
-              <Button 
-                type="button" 
-                size="icon" 
-                variant={isRecording ? "destructive" : "secondary"} 
-                onClick={toggleRecording}
-                className={`rounded-full h-8 w-8 ${isRecording ? "animate-pulse" : ""}`}
-                disabled={isSubmitting}
-              >
-                <Mic className="h-4 w-4" />
-              </Button>
+      {/* Chat area */}
+      <Card className="flex-1 flex flex-col overflow-hidden border-primary/20">
+        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+          <ScrollArea className="flex-1 p-4">
+            {messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                <MessageSquare className="h-12 w-12 text-muted-foreground/20 mb-4" />
+                <h3 className="text-lg font-medium mb-1">Hoi! Ik ben je studiecoach.</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-md">
+                  Ik ken je studiemateriaal, je planning en je doelen. Vraag me om hulp met studeren, planning of een quiz!
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-lg">
+                  {quickActions.map((action) => (
+                    <Button
+                      key={action.label}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-auto py-2 px-3 flex flex-col items-center gap-1"
+                      onClick={() => handleSendMessage(action.msg)}
+                    >
+                      <action.icon className="h-4 w-4 text-primary" />
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 pb-4">
+                {messages.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] p-3 rounded-lg ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                        : "bg-muted/50 border rounded-tl-none"
+                    }`}>
+                      {msg.role === "assistant" && !msg.content ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Input area */}
+          <div className="p-4 border-t bg-background">
+            {messages.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {quickActions.slice(0, 4).map((action) => (
+                  <Button
+                    key={action.label}
+                    variant="outline"
+                    size="sm"
+                    className="text-[11px] h-6 rounded-full"
+                    onClick={() => handleSendMessage(action.msg)}
+                    disabled={isTyping}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 items-end">
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Typ je bericht hier..."
+                className="min-h-[60px] resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+              />
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="icon"
+                  variant={isRecording ? "destructive" : "outline"}
+                  onClick={toggleRecording}
+                  className={isRecording ? "animate-pulse" : ""}
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => handleSendMessage()}
+                  disabled={isTyping || !message.trim()}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-          
-          <div className="mt-4 flex justify-end">
-            <Button 
-              onClick={handleSubmit} 
-              disabled={isSubmitting || !reviewText.trim()}
-              className="gap-2"
-            >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Vraag om Feedback
-            </Button>
           </div>
         </CardContent>
       </Card>
-
-      {coachResponse && (
-        <Card className="bg-muted/30 border-primary/30">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Jouw AI Studiecoach
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div 
-              className="prose prose-sm md:prose-base dark:prose-invert max-w-none prose-p:leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: coachResponse }} 
-            />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
