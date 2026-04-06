@@ -27,36 +27,44 @@ export default function Coaching() {
   const createConversation = useCreateOpenaiConversation();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
+  // Only load history when user explicitly switches to an older conversation
+  const [loadHistory, setLoadHistory] = useState(false);
   const { data: historyMessages = [] } = useListOpenaiMessages(activeConversationId || 0, {
-    query: { enabled: !!activeConversationId },
+    query: { enabled: loadHistory && !!activeConversationId },
   });
 
   useEffect(() => {
-    if (historyMessages.length > 0) {
+    if (loadHistory && historyMessages.length > 0) {
       setMessages(historyMessages.map((m) => ({ role: m.role, content: m.content })));
-    } else if (activeConversationId) {
-      setMessages([]);
+      setLoadHistory(false);
     }
-  }, [historyMessages, activeConversationId]);
+  }, [historyMessages, loadHistory]);
 
-  useEffect(() => {
-    if (conversations.length > 0 && !activeConversationId) {
-      setActiveConversationId(conversations[0].id);
-    } else if (conversations.length === 0 && !activeConversationId) {
+  const ensureConversation = async (): Promise<number> => {
+    if (activeConversationId) return activeConversationId;
+    // Create a new conversation for this session
+    return new Promise((resolve) => {
       createConversation.mutate(
-        { data: { title: "Studiecoach" } },
-        { onSuccess: (data) => setActiveConversationId(data.id) },
+        { data: { title: `Coach ${new Date().toLocaleDateString("nl-NL")}` } },
+        {
+          onSuccess: (data) => {
+            setActiveConversationId(data.id);
+            refetchConversations();
+            resolve(data.id);
+          },
+        },
       );
-    }
-  }, [conversations, activeConversationId]);
+    });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = async (text: string = message) => {
-    if (!text.trim() || !activeConversationId) return;
+    if (!text.trim()) return;
 
+    const convId = await ensureConversation();
     const userMsg = text;
     setMessage("");
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
@@ -67,7 +75,7 @@ export default function Coaching() {
 
     try {
       await streamOpenAiResponse(
-        `api/openai/conversations/${activeConversationId}/messages`,
+        `api/openai/conversations/${convId}/messages`,
         { content: userMsg },
         (chunk) => {
           aiResponse += chunk;
@@ -161,6 +169,7 @@ export default function Coaching() {
               onChange={(e) => {
                 setActiveConversationId(Number(e.target.value));
                 setMessages([]);
+                setLoadHistory(true);
               }}
             >
               {conversations.map((c) => (

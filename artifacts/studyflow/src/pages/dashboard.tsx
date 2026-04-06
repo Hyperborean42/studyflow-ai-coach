@@ -35,7 +35,6 @@ import {
   useUpdateCalendarEvent,
   useCreateOpenaiConversation,
   useListOpenaiConversations,
-  useListOpenaiMessages,
 } from "@workspace/api-client-react";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
 
@@ -127,59 +126,59 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // ─── Chat state ───────────��─────────────────────────────────────────────
+  // ─── Chat state (lazy — only fetches when user interacts) ────────────────
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [coachExpanded, setCoachExpanded] = useState(false);
+  const [coachActivated, setCoachActivated] = useState(false);
 
-  const { data: conversations = [] } = useListOpenaiConversations();
   const createConversation = useCreateOpenaiConversation();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
-  const { data: historyMessages = [] } = useListOpenaiMessages(activeConversationId || 0, {
-    query: { enabled: !!activeConversationId },
+  // Only fetch conversations when user activates the coach
+  const { data: conversations = [] } = useListOpenaiConversations({
+    query: { enabled: coachActivated },
   });
 
   useEffect(() => {
-    if (historyMessages.length > 0) {
-      setMessages(historyMessages.map((m) => ({ role: m.role, content: m.content })));
-    }
-  }, [historyMessages]);
+    if (!coachActivated || !conversations.length || activeConversationId) return;
+    setActiveConversationId(conversations[0].id);
+  }, [conversations, activeConversationId, coachActivated]);
 
-  useEffect(() => {
-    if (conversations.length > 0 && !activeConversationId) {
-      setActiveConversationId(conversations[0].id);
-    } else if (conversations.length === 0 && !activeConversationId) {
-      createConversation.mutate(
-        { data: { title: "Studiecoach" } },
-        { onSuccess: (data) => setActiveConversationId(data.id) },
-      );
-    }
-  }, [conversations, activeConversationId]);
-
-  // Handle incoming ?chat= param
+  // Handle incoming ?chat= param — activate coach if needed
   const [chatParamHandled, setChatParamHandled] = useState(false);
   useEffect(() => {
-    if (chatParamHandled || !activeConversationId) return;
+    if (chatParamHandled) return;
     const params = new URLSearchParams(searchString);
     const chatMsg = params.get("chat");
     if (chatMsg) {
+      setCoachActivated(true);
       setChatParamHandled(true);
-      handleSendMessage(decodeURIComponent(chatMsg));
-      navigate("/", { replace: true });
     }
-  }, [searchString, activeConversationId, chatParamHandled]);
+  }, [searchString, chatParamHandled]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = async (text: string = message) => {
-    if (!text.trim() || !activeConversationId) return;
+  const ensureConversation = async (): Promise<number> => {
+    if (activeConversationId) return activeConversationId;
+    return new Promise((resolve) => {
+      createConversation.mutate(
+        { data: { title: "Studiecoach" } },
+        { onSuccess: (data) => { setActiveConversationId(data.id); resolve(data.id); } },
+      );
+    });
+  };
 
+  const handleSendMessage = async (text: string = message) => {
+    if (!text.trim()) return;
+    setCoachActivated(true);
+
+    const convId = await ensureConversation();
     const userMsg = text;
     setMessage("");
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
@@ -190,7 +189,7 @@ export default function Dashboard() {
 
     try {
       await streamOpenAiResponse(
-        `api/openai/conversations/${activeConversationId}/messages`,
+        `api/openai/conversations/${convId}/messages`,
         { content: userMsg },
         (chunk) => {
           aiResponse += chunk;
