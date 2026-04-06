@@ -206,10 +206,10 @@ export default function Planning() {
   return (
     <div className="h-full flex flex-col space-y-4">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold">Planning & Doelen</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Beheer je agenda, toetsen en studiedoelen.</p>
+          <h1 className="text-xl md:text-3xl font-bold">Planning & Doelen</h1>
+          <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">Beheer je agenda, toetsen en studiedoelen.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={handleReschedule} disabled={isRescheduling}>
@@ -261,7 +261,12 @@ export default function Planning() {
                     <FormField control={eventForm.control} name="subject" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Vak (optioneel)</FormLabel>
-                        <FormControl><Input placeholder="Bijv. Wiskunde" {...field} /></FormControl>
+                        <FormControl>
+                          <div className="flex gap-2">
+                            <Input placeholder="Bijv. Wiskunde" {...field} />
+                            <SpeechButton onTranscript={(t) => field.onChange(field.value ? field.value + " " + t : t)} />
+                          </div>
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -316,26 +321,27 @@ export default function Planning() {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 flex-1 min-h-0 overflow-hidden">
         {/* Week Calendar */}
         <Card className="md:col-span-8 flex flex-col h-full overflow-hidden">
-          <CardHeader className="pb-3 border-b">
+          <CardHeader className="pb-2 md:pb-3 border-b px-3 md:px-6">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                Weekkalender
+              <CardTitle className="text-sm md:text-lg flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                <span className="hidden md:inline">Weekkalender</span>
+                <span className="md:hidden">Week</span>
               </CardTitle>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 {!isCurrentWeek && (
-                  <Button variant="outline" size="sm" className="text-xs h-7 mr-1" onClick={goToToday}>
-                    Vandaag
+                  <Button variant="outline" size="sm" className="text-[10px] md:text-xs h-6 md:h-7 mr-0.5" onClick={goToToday}>
+                    Nu
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goToWeek(-1)}>
-                  <ChevronLeft className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7" onClick={() => goToWeek(-1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
-                <span className="text-sm font-medium min-w-[140px] text-center">
-                  {format(startDate, "d MMM", { locale: nl })} – {format(endDate, "d MMM yyyy", { locale: nl })}
+                <span className="text-xs md:text-sm font-medium min-w-[100px] md:min-w-[140px] text-center">
+                  {format(startDate, "d MMM", { locale: nl })} – {format(endDate, "d MMM", { locale: nl })}
                 </span>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goToWeek(1)}>
-                  <ChevronRight className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-6 w-6 md:h-7 md:w-7" onClick={() => goToWeek(1)}>
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>

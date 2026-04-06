@@ -19,25 +19,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   if (isMobile) {
     return (
       <div className="flex flex-col h-[100dvh] w-full bg-background">
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto p-3 pb-1">
           {children}
         </main>
-        <nav className="border-t border-border/50 bg-background safe-area-bottom">
-          <div className="flex items-center justify-around py-2">
+        <nav className="border-t border-border/50 bg-background/95 backdrop-blur-sm safe-area-bottom">
+          <div className="flex items-center justify-around py-1.5">
             {navItems.map((item) => {
               const isActive = location === item.href;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] transition-colors active:scale-95 ${
                     isActive
                       ? "text-primary font-medium"
                       : "text-muted-foreground"
                   }`}
                   data-testid={`nav-${item.name.toLowerCase()}`}
                 >
-                  <item.icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
+                  <item.icon className={`h-4.5 w-4.5 ${isActive ? "text-primary" : ""}`} />
                   <span>{item.name}</span>
                 </Link>
               );

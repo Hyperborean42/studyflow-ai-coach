@@ -143,20 +143,20 @@ export default function Coaching() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Lightbulb className="h-7 w-7 text-primary" />
+      <header className="flex items-center justify-between mb-2 md:mb-4">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-3xl font-bold flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 md:h-7 md:w-7 text-primary" />
             AI Studiecoach
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">
             Je persoonlijke coach die je materiaal kent, je planning begrijpt, en je helpt studeren.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {conversations.length > 1 && (
             <select
-              className="text-sm border rounded-md px-2 py-1 bg-background"
+              className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background max-w-[120px] md:max-w-none"
               value={activeConversationId || ""}
               onChange={(e) => {
                 setActiveConversationId(Number(e.target.value));
@@ -168,8 +168,9 @@ export default function Coaching() {
               ))}
             </select>
           )}
-          <Button variant="outline" size="sm" onClick={handleNewConversation}>
-            <RotateCcw className="h-4 w-4 mr-1" /> Nieuw gesprek
+          <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleNewConversation}>
+            <RotateCcw className="h-3.5 w-3.5 md:mr-1" />
+            <span className="hidden md:inline">Nieuw gesprek</span>
           </Button>
         </div>
       </header>
@@ -179,22 +180,22 @@ export default function Coaching() {
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           <ScrollArea className="flex-1 p-4">
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                <MessageSquare className="h-12 w-12 text-muted-foreground/20 mb-4" />
-                <h3 className="text-lg font-medium mb-1">Hoi! Ik ben je studiecoach.</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                  Ik ken je studiemateriaal, je planning en je doelen. Vraag me om hulp met studeren, planning of een quiz!
+              <div className="h-full flex flex-col items-center justify-center text-center p-4 md:p-8">
+                <MessageSquare className="h-8 w-8 md:h-12 md:w-12 text-muted-foreground/20 mb-3" />
+                <h3 className="text-base md:text-lg font-medium mb-1">Hoi! Ik ben je studiecoach.</h3>
+                <p className="text-xs md:text-sm text-muted-foreground mb-4 max-w-md">
+                  Vraag me om hulp met studeren, planning of een quiz!
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-lg">
+                <div className="grid grid-cols-3 gap-1.5 md:gap-2 max-w-lg">
                   {quickActions.map((action) => (
                     <Button
                       key={action.label}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-auto py-2 px-3 flex flex-col items-center gap-1"
+                      className="text-[11px] md:text-xs h-auto py-1.5 px-2 md:py-2 md:px-3 flex flex-col items-center gap-0.5"
                       onClick={() => handleSendMessage(action.msg)}
                     >
-                      <action.icon className="h-4 w-4 text-primary" />
+                      <action.icon className="h-3.5 w-3.5 text-primary" />
                       {action.label}
                     </Button>
                   ))}
@@ -223,9 +224,9 @@ export default function Coaching() {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="p-4 border-t bg-background">
+          <div className="p-3 md:p-4 border-t bg-background">
             {messages.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-3">
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {quickActions.slice(0, 4).map((action) => (
                   <Button
                     key={action.label}
@@ -244,8 +245,8 @@ export default function Coaching() {
               <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Typ je bericht hier..."
-                className="min-h-[60px] resize-none"
+                placeholder="Typ je bericht..."
+                className="min-h-[44px] max-h-[88px] resize-none text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -253,23 +254,22 @@ export default function Coaching() {
                   }
                 }}
               />
-              <div className="flex flex-col gap-2">
-                <Button
-                  size="icon"
-                  variant={isRecording ? "destructive" : "outline"}
-                  onClick={toggleRecording}
-                  className={isRecording ? "animate-pulse" : ""}
-                >
-                  <Mic className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  onClick={() => handleSendMessage()}
-                  disabled={isTyping || !message.trim()}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                size="icon"
+                variant={isRecording ? "destructive" : "outline"}
+                onClick={toggleRecording}
+                className={`h-[44px] w-[44px] shrink-0 ${isRecording ? "animate-pulse" : ""}`}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                className="h-[44px] w-[44px] shrink-0"
+                onClick={() => handleSendMessage()}
+                disabled={isTyping || !message.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         </CardContent>

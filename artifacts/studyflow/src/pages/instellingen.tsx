@@ -112,8 +112,8 @@ export default function Instellingen() {
   return (
     <div className="h-full flex flex-col space-y-6 max-w-3xl mx-auto w-full pb-10">
       <header>
-        <h1 className="text-3xl font-bold text-foreground">Instellingen</h1>
-        <p className="text-muted-foreground mt-1">Personaliseer je studiecoach en pas notificaties aan.</p>
+        <h1 className="text-xl md:text-3xl font-bold text-foreground">Instellingen</h1>
+        <p className="text-muted-foreground text-xs md:text-sm mt-0.5">Personaliseer je studiecoach en pas notificaties aan.</p>
       </header>
 
       <Card>

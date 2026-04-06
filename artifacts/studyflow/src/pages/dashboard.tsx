@@ -26,7 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { SpeechButton } from "@/components/speech-button";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useListCalendarEvents,
   useGetProgress,
@@ -93,6 +93,7 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
 
   const now = new Date();
   const todayStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -108,7 +109,13 @@ export default function Dashboard() {
   const { data: progress } = useGetProgress();
   const { data: weakPoints = [] } = useGetWeakPoints();
   const { data: streak } = useGetStudyStreak();
-  const updateEvent = useUpdateCalendarEvent();
+  const updateEvent = useUpdateCalendarEvent({
+    mutation: {
+      onMutate: async () => {
+        await queryClient.cancelQueries({ queryKey: ["listCalendarEvents"] });
+      },
+    },
+  });
 
   const { data: suggestions = [], isLoading: isLoadingSuggestions } = useQuery<AgentSuggestion[]>({
     queryKey: ["agent-suggestions"],
@@ -250,44 +257,44 @@ export default function Dashboard() {
   // Today's agenda — compact timeline
   const todayAgenda = (
     <Card className="flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Clock className="h-4 w-4 text-primary" />
-          Vandaag — {format(now, "EEEE d MMMM", { locale: nl })}
+      <CardHeader className="py-2.5 px-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Clock className="h-3.5 w-3.5 text-primary" />
+          Vandaag — {format(now, "EEE d MMM", { locale: nl })}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="px-3 pb-3 pt-0 space-y-1.5">
         {isLoadingEvents ? (
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-3/4" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-7 w-full" />
+            <Skeleton className="h-7 w-3/4" />
           </div>
         ) : todayEvents.length > 0 ? (
           todayEvents.map((event: { id: number; type: string; completed: boolean; title: string; startTime: string; subject?: string }) => (
             <div
               key={event.id}
-              className={`flex items-center gap-3 p-2 rounded-lg border text-sm cursor-pointer transition-opacity ${getEventColor(event.type)} ${event.completed ? "opacity-50 line-through" : ""}`}
+              className={`flex items-center gap-2 py-1.5 px-2 rounded-md border text-xs cursor-pointer transition-all duration-100 active:scale-[0.98] ${getEventColor(event.type)} ${event.completed ? "opacity-50 line-through" : ""}`}
               onClick={() => toggleEventComplete(event)}
             >
-              <span className="text-xs font-mono opacity-70 w-10 shrink-0">
+              <span className="font-mono opacity-70 w-9 shrink-0">
                 {format(new Date(event.startTime), "HH:mm")}
               </span>
               <span className="font-medium flex-1 truncate">{event.title}</span>
               {event.subject && (
-                <Badge variant="outline" className="text-[10px] shrink-0">{event.subject}</Badge>
+                <Badge variant="outline" className="text-[9px] shrink-0">{event.subject}</Badge>
               )}
             </div>
           ))
         ) : (
-          <p className="text-sm text-muted-foreground italic">Geen items vandaag. Lekker rustig, of plan iets in!</p>
+          <p className="text-xs text-muted-foreground italic">Geen items vandaag.</p>
         )}
 
         {tomorrowEvents.length > 0 && (
-          <div className="pt-2 mt-2 border-t">
-            <p className="text-xs font-medium text-muted-foreground mb-1.5">Morgen</p>
-            {tomorrowEvents.slice(0, 3).map((event: { id: number; type: string; title: string; startTime: string }) => (
-              <div key={event.id} className="flex items-center gap-3 text-xs text-muted-foreground py-0.5">
-                <span className="font-mono w-10 shrink-0">{format(new Date(event.startTime), "HH:mm")}</span>
+          <div className="pt-1.5 mt-1 border-t">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1">Morgen</p>
+            {tomorrowEvents.slice(0, 2).map((event: { id: number; type: string; title: string; startTime: string }) => (
+              <div key={event.id} className="flex items-center gap-2 text-[11px] text-muted-foreground py-0.5">
+                <span className="font-mono w-9 shrink-0">{format(new Date(event.startTime), "HH:mm")}</span>
                 <span className="truncate">{event.title}</span>
               </div>
             ))}
@@ -297,33 +304,33 @@ export default function Dashboard() {
     </Card>
   );
 
-  // Upcoming exams — milestone cards
+  // Upcoming exams — compact milestone cards
   const examsSection = (
     <Card className="flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <GraduationCap className="h-4 w-4 text-destructive" />
+      <CardHeader className="py-2.5 px-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <GraduationCap className="h-3.5 w-3.5 text-destructive" />
           Komende Toetsen
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3 pb-3 pt-0">
         {upcomingExams.length > 0 ? (
-          <div className="space-y-2">
-            {upcomingExams.map((exam: { id: number; title: string; startTime: string; subject?: string }) => {
+          <div className="space-y-1.5">
+            {upcomingExams.slice(0, 3).map((exam: { id: number; title: string; startTime: string; subject?: string }) => {
               const examDate = new Date(exam.startTime);
               const daysUntil = differenceInDays(startOfDay(examDate), startOfDay(now));
               const urgency = daysUntil <= 2 ? "destructive" : daysUntil <= 5 ? "outline" : "secondary";
 
               return (
-                <div key={exam.id} className="flex items-center gap-3 p-2 rounded-lg border bg-card">
+                <div key={exam.id} className="flex items-center gap-2 py-1.5 px-2 rounded-md border bg-card text-xs">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{exam.title}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-medium truncate">{exam.title}</p>
+                    <p className="text-[10px] text-muted-foreground">
                       {format(examDate, "EEE d MMM", { locale: nl })}
                       {exam.subject && ` · ${exam.subject}`}
                     </p>
                   </div>
-                  <Badge variant={urgency} className="text-[10px] shrink-0">
+                  <Badge variant={urgency} className="text-[9px] shrink-0">
                     {countdownLabel(examDate)}
                   </Badge>
                 </div>
@@ -331,43 +338,43 @@ export default function Dashboard() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">Geen toetsen gepland. Voeg ze toe in Planning!</p>
+          <p className="text-xs text-muted-foreground italic">Geen toetsen gepland.</p>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className="w-full mt-2 text-xs"
+          className="w-full mt-1.5 text-[11px] h-7"
           onClick={() => navigate("/planning")}
         >
-          Ga naar planning <ChevronRight className="ml-1 h-3 w-3" />
+          Planning <ChevronRight className="ml-1 h-3 w-3" />
         </Button>
       </CardContent>
     </Card>
   );
 
-  // Quick stats bar
+  // Quick stats bar — compact
   const statsBar = (
-    <div className="grid grid-cols-3 gap-3">
-      <Card className="text-center p-3">
-        <div className="flex items-center justify-center gap-1.5 mb-1">
-          <Flame className="h-4 w-4 text-orange-500" />
-          <span className="text-xl font-bold">{streak?.currentStreak || 0}</span>
+    <div className="grid grid-cols-3 gap-2">
+      <Card className="text-center p-2">
+        <div className="flex items-center justify-center gap-1 mb-0.5">
+          <Flame className="h-3.5 w-3.5 text-orange-500" />
+          <span className="text-lg font-bold">{streak?.currentStreak || 0}</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">Dagen streak</p>
+        <p className="text-[10px] text-muted-foreground">Streak</p>
       </Card>
-      <Card className="text-center p-3">
-        <div className="flex items-center justify-center gap-1.5 mb-1">
-          <Target className="h-4 w-4 text-primary" />
-          <span className="text-xl font-bold">{progress?.completedGoals || 0}/{progress?.totalGoals || 0}</span>
+      <Card className="text-center p-2">
+        <div className="flex items-center justify-center gap-1 mb-0.5">
+          <Target className="h-3.5 w-3.5 text-primary" />
+          <span className="text-lg font-bold">{progress?.completedGoals || 0}/{progress?.totalGoals || 0}</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">Doelen</p>
+        <p className="text-[10px] text-muted-foreground">Doelen</p>
       </Card>
-      <Card className="text-center p-3">
-        <div className="flex items-center justify-center gap-1.5 mb-1">
-          <Clock className="h-4 w-4 text-blue-500" />
-          <span className="text-xl font-bold">{progress?.weeklyHours || 0}u</span>
+      <Card className="text-center p-2">
+        <div className="flex items-center justify-center gap-1 mb-0.5">
+          <Clock className="h-3.5 w-3.5 text-blue-500" />
+          <span className="text-lg font-bold">{progress?.weeklyHours || 0}u</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">Deze week</p>
+        <p className="text-[10px] text-muted-foreground">Deze week</p>
       </Card>
     </div>
   );
@@ -416,7 +423,7 @@ export default function Dashboard() {
 
   // Mini coach chat
   const miniCoach = (
-    <Card className={`flex flex-col overflow-hidden border-primary/20 ${isMobile ? "flex-1 min-h-[300px]" : "h-full"}`}>
+    <Card className={`flex flex-col overflow-hidden border-primary/20 ${isMobile ? "flex-1 min-h-[200px]" : "h-full"}`}>
       <CardHeader className="pb-2 bg-primary/5 border-b">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
@@ -623,18 +630,22 @@ export default function Dashboard() {
 
   if (isMobile) {
     return (
-      <div className="h-full flex flex-col space-y-4">
+      <div className="h-full flex flex-col space-y-3">
         {expandedCoach}
         <header>
-          <h1 className="text-2xl font-bold">Welkom terug!</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {format(now, "EEEE d MMMM", { locale: nl })}
+          <h1 className="text-lg font-bold">Welkom terug!</h1>
+          <p className="text-muted-foreground text-xs">
+            {format(now, "EEE d MMMM", { locale: nl })}
           </p>
         </header>
 
         {statsBar}
-        {todayAgenda}
-        {upcomingExams.length > 0 && examsSection}
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-1">{todayAgenda}</div>
+          <div className="col-span-1">{examsSection}</div>
+        </div>
+
         {suggestionsPanel}
         {weakPointsSection}
         {miniCoach}

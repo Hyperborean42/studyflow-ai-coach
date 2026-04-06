@@ -279,8 +279,8 @@ export default function Materialen() {
       )}
 
       <header>
-        <h1 className="text-3xl font-bold text-foreground">Studiemateriaal</h1>
-        <p className="text-muted-foreground mt-1">Upload lesstof, bekijk samenvattingen en genereer oefeningen.</p>
+        <h1 className="text-xl md:text-3xl font-bold text-foreground">Studiemateriaal</h1>
+        <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">Upload lesstof, bekijk samenvattingen en genereer oefeningen.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 min-h-0">
