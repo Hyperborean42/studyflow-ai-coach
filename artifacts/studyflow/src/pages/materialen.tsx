@@ -204,9 +204,13 @@ export default function Materialen() {
     });
   };
 
-  const handleChatAboutMaterial = (title: string) => {
-    const chatMessage = encodeURIComponent(`Leg ${title} uit en stel me er vragen over`);
-    navigate(`/?chat=${chatMessage}`);
+  const handleChatAboutMaterial = (materialId: number) => {
+    const material = materials.find((m) => m.id === materialId);
+    if (!material) return;
+    const prompt = `Leg de inhoud van "${material.title}" uit en maak een quiz voor me.`;
+    navigate(
+      `/coaching?material=${materialId}&chat=${encodeURIComponent(prompt)}`,
+    );
   };
 
   const resetQuizSession = () => {
@@ -344,7 +348,7 @@ export default function Materialen() {
                       size="icon"
                       className="h-7 w-7 flex-shrink-0"
                       title="Chat over dit materiaal"
-                      onClick={() => handleChatAboutMaterial(material.title)}
+                      onClick={() => handleChatAboutMaterial(material.id)}
                     >
                       <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
@@ -390,7 +394,7 @@ export default function Materialen() {
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept=".pptx,.docx,.txt,.md"
+                          accept=".pptx,.docx,.pdf,.txt,.md"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
@@ -586,12 +590,16 @@ export default function Materialen() {
               <TabsContent value="verwerken" className="m-0">
                 {activeMaterial && (
                   <div className="space-y-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h2 className="text-2xl font-bold">{activeMaterial.title}</h2>
-                        <p className="text-muted-foreground">{activeMaterial.subject}</p>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <h2 className="text-xl md:text-2xl font-bold truncate">{activeMaterial.title}</h2>
+                        <p className="text-sm text-muted-foreground">
+                          {activeMaterial.subject}
+                          {" · "}
+                          {(activeMaterial.content?.length || 0).toLocaleString()} tekens
+                        </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 shrink-0">
                         {activeMaterial.fileType === "pptx" && (
                           <Button
                             variant="default"
@@ -605,13 +613,30 @@ export default function Materialen() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleChatAboutMaterial(activeMaterial.title)}
+                          onClick={() => handleChatAboutMaterial(activeMaterial.id)}
                         >
                           <MessageSquare className="mr-2 h-4 w-4" />
-                          Chat
+                          Chat met coach
                         </Button>
                       </div>
                     </div>
+
+                    {/* Raw content viewer */}
+                    <Card className="shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                          <FileText className="h-4 w-4" />
+                          Inhoud
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-[300px] rounded-md border bg-muted/30 p-4">
+                          <Markdown compact className="text-sm">
+                            {activeMaterial.content || "_Geen inhoud beschikbaar._"}
+                          </Markdown>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <Card className="shadow-none border-primary/20">

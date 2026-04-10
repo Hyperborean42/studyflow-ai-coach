@@ -38,7 +38,7 @@ const SYSTEM_PROMPT = `Je bent StudyFlow Coach, een proactieve AI-studiecoach en
    - "Wil je oefenvragen over dit onderwerp?"
    - "Zal ik een samenvatting maken die je kunt opslaan?"
    - "Wil je dat ik dit onderwerp in je studieplan zet?"
-2. **Materiaal-bewust**: Als de leerling vraagt over een onderwerp waarvoor studiemateriaal is opgeslagen, verwijs daar expliciet naar en gebruik de inhoud: "Volgens je aantekeningen over [onderwerp]..."
+2. **Materiaal-bewust**: Als er studiemateriaal in je context staat (onder "ACTIEF STUDIEMATERIAAL" of "RELEVANT STUDIEMATERIAAL"), gebruik die tekst direct. Je KUNT de inhoud lezen — vraag de leerling NOOIT om tekst te kopiëren of te plakken. Citeer, vat samen, maak quizvragen en oefeningen op basis van de beschikbare content. Als de leerling vraagt "maak een quiz" en er is materiaal beschikbaar, maak dan direct de quiz — vraag niet om meer input.
 3. **Planning-bewust**: Als er toetsen aankomen, waarschuw proactief. Stel studieblokken voor op basis van de agenda.
 4. **Examengericht**: Koppel uitleg altijd aan exameneisen. Benoem of iets SE- of CE-stof is als relevant.
 5. **Studietechnieken**: Pas actief bewezen studietechnieken toe:
@@ -57,8 +57,15 @@ const SYSTEM_PROMPT = `Je bent StudyFlow Coach, een proactieve AI-studiecoach en
 /**
  * Gather full student context: materials, calendar, goals, weak points.
  * This makes the coach a unified agent aware of everything.
+ *
+ * If `focusedMaterialId` is provided, that material's FULL content is injected
+ * (up to 30k chars) so the coach can answer content questions, generate quizzes,
+ * and make summaries without the user having to copy/paste.
  */
-async function gatherStudentContext(userMessage: string): Promise<string> {
+async function gatherStudentContext(
+  userMessage: string,
+  focusedMaterialId?: number,
+): Promise<string> {
   const now = new Date();
   const twoWeeksOut = new Date(now);
   twoWeeksOut.setDate(twoWeeksOut.getDate() + 14);
@@ -70,8 +77,16 @@ async function gatherStudentContext(userMessage: string): Promise<string> {
     .filter((w) => w.length > 3);
 
   // Fetch everything in parallel
-  const [relevantMaterials, allMaterials, upcomingEvents, goals, weakPoints] =
+  const [focusedMaterial, relevantMaterials, allMaterials, upcomingEvents, goals, weakPoints] =
     await Promise.all([
+      // Focused material (full content)
+      focusedMaterialId
+        ? db
+            .select()
+            .from(studyMaterialsTable)
+            .where(eq(studyMaterialsTable.id, focusedMaterialId))
+            .limit(1)
+        : Promise.resolve([]),
       // Keyword-matched materials
       keywords.length > 0
         ? db
@@ -81,6 +96,7 @@ async function gatherStudentContext(userMessage: string): Promise<string> {
               or(
                 ...keywords.slice(0, 5).map((kw) => ilike(studyMaterialsTable.subject, `%${kw}%`)),
                 ...keywords.slice(0, 5).map((kw) => ilike(studyMaterialsTable.title, `%${kw}%`)),
+                ...keywords.slice(0, 5).map((kw) => ilike(studyMaterialsTable.content, `%${kw}%`)),
               ),
             )
             .limit(3)
@@ -106,23 +122,41 @@ async function gatherStudentContext(userMessage: string): Promise<string> {
 
   const parts: string[] = [];
 
-  // Material context (detailed for keyword matches)
-  if (relevantMaterials.length > 0) {
+  // Focused material — FULL content (up to 30k chars) — the coach should be able
+  // to read this and generate quizzes, summaries, or answer content questions.
+  if (focusedMaterial.length > 0) {
+    const m = focusedMaterial[0];
+    const content = m.content.length > 30000 ? m.content.slice(0, 30000) + "\n\n[...content ingekort om tokenlimiet te respecteren]" : m.content;
+    parts.push(
+      `\n=== ACTIEF STUDIEMATERIAAL ===
+Titel: "${m.title}"
+Vak: ${m.subject}${m.chapter ? `\nHoofdstuk: ${m.chapter}` : ""}${m.examType ? `\nExamentype: ${m.examType}` : ""}
+
+VOLLEDIGE INHOUD (lees dit zorgvuldig — gebruik het om vragen te beantwoorden, quizzen te maken, en samenvattingen te schrijven. Vraag NOOIT aan de leerling om inhoud te plakken — die is hier beschikbaar):
+
+${content}
+
+=== EINDE ACTIEF STUDIEMATERIAAL ===`,
+    );
+  }
+
+  // Material context (detailed for keyword matches) — only if no focused material to avoid duplication
+  if (focusedMaterial.length === 0 && relevantMaterials.length > 0) {
     const materialContext = relevantMaterials
       .map(
         (m) =>
-          `--- Studiemateriaal: "${m.title}" (${m.subject}${m.chapter ? `, ${m.chapter}` : ""}) ---\n${m.summary || m.content.substring(0, 2000)}\n---`,
+          `--- Studiemateriaal: "${m.title}" (${m.subject}${m.chapter ? `, ${m.chapter}` : ""}) ---\n${m.content.substring(0, 8000)}\n---`,
       )
       .join("\n\n");
     parts.push(
-      `\nRELEVANT STUDIEMATERIAAL (verwijs hier expliciet naar):\n${materialContext}`,
+      `\nRELEVANT STUDIEMATERIAAL (verwijs hier expliciet naar — gebruik deze tekst om vragen te beantwoorden):\n${materialContext}`,
     );
   }
 
   // All materials overview
   if (allMaterials.length > 0) {
     parts.push(
-      `\nBESCHIKBAAR MATERIAAL:\n${allMaterials.map((m) => `- "${m.title}" (${m.subject}${m.chapter ? `, ${m.chapter}` : ""})`).join("\n")}`,
+      `\nBESCHIKBAAR MATERIAAL:\n${allMaterials.map((m) => `- "${m.title}" (${m.subject}${m.chapter ? `, ${m.chapter}` : ""}) [id=${m.id}]`).join("\n")}`,
     );
   }
 
@@ -215,6 +249,17 @@ router.post("/openai/conversations/:id/messages", async (req, res) => {
   const { id } = SendOpenaiMessageParams.parse({ id: Number(req.params.id) });
   const body = SendOpenaiMessageBody.parse(req.body);
 
+  // Optional: materialId can be sent alongside the message to give the coach
+  // full access to that material's content. Not part of the Zod schema so
+  // we read it directly from the raw body.
+  const rawMaterialId = (req.body as { materialId?: unknown }).materialId;
+  const focusedMaterialId =
+    typeof rawMaterialId === "number"
+      ? rawMaterialId
+      : typeof rawMaterialId === "string" && /^\d+$/.test(rawMaterialId)
+        ? Number(rawMaterialId)
+        : undefined;
+
   await db.insert(messages).values({
     conversationId: id,
     role: "user",
@@ -224,7 +269,7 @@ router.post("/openai/conversations/:id/messages", async (req, res) => {
   const allMessages = await db.select().from(messages).where(eq(messages.conversationId, id)).orderBy(messages.createdAt);
 
   // Unified agent: enrich with materials + planning + goals + weak points
-  const studentContext = await gatherStudentContext(body.content);
+  const studentContext = await gatherStudentContext(body.content, focusedMaterialId);
   const enrichedSystemPrompt = SYSTEM_PROMPT + studentContext;
 
   const assistantContent = await streamClaudeResponse(

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useSearch, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,10 +20,13 @@ import { streamOpenAiResponse } from "@/lib/api-streaming";
 
 export default function Coaching() {
   const { toast } = useToast();
+  const searchString = useSearch();
+  const [, navigate] = useLocation();
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], refetch: refetchConversations } = useListOpenaiConversations();
@@ -78,7 +82,9 @@ export default function Coaching() {
     try {
       await streamOpenAiResponse(
         `api/openai/conversations/${convId}/messages`,
-        { content: userMsg },
+        activeMaterialId
+          ? { content: userMsg, materialId: activeMaterialId }
+          : { content: userMsg },
         (chunk) => {
           aiResponse += chunk;
           setMessages((prev) => {
@@ -94,6 +100,31 @@ export default function Coaching() {
       setIsTyping(false);
     }
   };
+
+  // Handle incoming ?material= and ?chat= params — pin the material and auto-send
+  const [navParamsHandled, setNavParamsHandled] = useState(false);
+  useEffect(() => {
+    if (navParamsHandled) return;
+    const params = new URLSearchParams(searchString);
+    const materialParam = params.get("material");
+    const chatParam = params.get("chat");
+
+    if (materialParam && /^\d+$/.test(materialParam)) {
+      setActiveMaterialId(Number(materialParam));
+    }
+
+    if (chatParam) {
+      setNavParamsHandled(true);
+      // Defer the send by one tick so state (activeMaterialId) is committed
+      setTimeout(() => {
+        handleSendMessage(decodeURIComponent(chatParam));
+        navigate("/coaching", { replace: true });
+      }, 50);
+    } else if (materialParam) {
+      setNavParamsHandled(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString, navParamsHandled]);
 
   const handleNewConversation = () => {
     createConversation.mutate(
@@ -185,6 +216,24 @@ export default function Coaching() {
           </Button>
         </div>
       </header>
+
+      {/* Active material indicator */}
+      {activeMaterialId && (
+        <div className="mb-2 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
+          <span className="flex items-center gap-2 min-w-0">
+            <BookOpen className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="truncate">Coach kan je studiemateriaal lezen</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[11px] shrink-0"
+            onClick={() => setActiveMaterialId(null)}
+          >
+            Losmaken
+          </Button>
+        </div>
+      )}
 
       {/* Chat area */}
       <Card className="flex-1 flex flex-col overflow-hidden border-primary/20">

@@ -20,9 +20,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 /**
  * Extract text content from uploaded file buffer.
- * Supports: .pptx, .docx, .txt, .md
+ * Supports: .pptx, .docx, .pdf, .txt, .md
  */
-function extractTextFromFile(buffer: Buffer, filename: string): string {
+async function extractTextFromFile(buffer: Buffer, filename: string): Promise<string> {
   const ext = filename.toLowerCase().split(".").pop() || "";
 
   if (ext === "pptx") {
@@ -31,8 +31,23 @@ function extractTextFromFile(buffer: Buffer, filename: string): string {
   if (ext === "docx") {
     return extractDocxText(buffer);
   }
+  if (ext === "pdf") {
+    return await extractPdfText(buffer);
+  }
   // Plain text / markdown
   return buffer.toString("utf-8");
+}
+
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  // unpdf is a lightweight, dependency-free PDF text extractor that works
+  // in Node + esbuild bundles (unlike pdf-parse which has debug-mode issues).
+  const { getDocumentProxy, extractText } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const result = await extractText(pdf, { mergePages: true });
+  const text = result.text as unknown;
+  if (typeof text === "string") return text;
+  if (Array.isArray(text)) return (text as string[]).join("\n\n");
+  return String(text ?? "");
 }
 
 function extractPptxText(buffer: Buffer): string {
@@ -120,9 +135,12 @@ router.post("/study-materials/upload", upload.single("file"), async (req, res) =
 
   let content: string;
   try {
-    content = extractTextFromFile(file.buffer, file.originalname);
+    content = await extractTextFromFile(file.buffer, file.originalname);
   } catch (err) {
-    res.status(422).json({ error: "Kon tekst niet uit bestand halen. Probeer een .pptx, .docx of .txt bestand." });
+    console.error("extractTextFromFile error:", err);
+    res.status(422).json({
+      error: "Kon tekst niet uit bestand halen. Probeer een .pptx, .docx, .pdf of .txt bestand.",
+    });
     return;
   }
 
