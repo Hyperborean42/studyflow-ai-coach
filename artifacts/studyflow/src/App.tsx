@@ -8,6 +8,7 @@ import Dashboard from "@/pages/dashboard";
 import Materialen from "@/pages/materialen";
 import Planning from "@/pages/planning";
 import Coaching from "@/pages/coaching";
+import Vertalen from "@/pages/vertalen";
 import Instellingen from "@/pages/instellingen";
 
 const queryClient = new QueryClient({
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/materialen" component={Materialen} />
         <Route path="/planning" component={Planning} />
         <Route path="/coaching" component={Coaching} />
+        <Route path="/vertalen" component={Vertalen} />
         <Route path="/instellingen" component={Instellingen} />
         <Route component={NotFound} />
       </Switch>

@@ -7,6 +7,7 @@ import calendarEventsRouter from "./calendarEvents";
 import progressRouter from "./progress";
 import settingsRouter from "./settingsRoutes";
 import agentRouter from "./agent";
+import translateRouter from "./translate";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(calendarEventsRouter);
 router.use(progressRouter);
 router.use(settingsRouter);
 router.use(agentRouter);
+router.use(translateRouter);
 
 export default router;

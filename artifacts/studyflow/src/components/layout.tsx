@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { BookOpen, Calendar, Settings, MessageCircle, Home } from "lucide-react";
+import { BookOpen, Calendar, Settings, MessageCircle, Home, Languages } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -13,6 +13,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Materialen", href: "/materialen", icon: BookOpen },
     { name: "Planning", href: "/planning", icon: Calendar },
     { name: "Coaching", href: "/coaching", icon: MessageCircle },
+    { name: "Vertaler", href: "/vertalen", icon: Languages },
     { name: "Instellingen", href: "/instellingen", icon: Settings },
   ];
 
