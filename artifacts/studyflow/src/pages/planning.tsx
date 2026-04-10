@@ -72,6 +72,8 @@ export default function Planning() {
   const [rescheduleMessage, setRescheduleMessage] = useState("");
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [addGoalOpen, setAddGoalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
 
   const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
   const endDate = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -108,6 +110,7 @@ export default function Planning() {
   });
 
   const openAddEventForDay = (day: Date) => {
+    setEditingEventId(null);
     eventForm.reset({
       title: "",
       type: "studie",
@@ -115,6 +118,28 @@ export default function Planning() {
       date: format(day, "yyyy-MM-dd"),
       startTime: "15:30",
       endTime: "17:00",
+    });
+    setAddEventOpen(true);
+  };
+
+  const openEditEvent = (event: {
+    id: number;
+    title: string;
+    type: string;
+    subject?: string;
+    startTime: string;
+    endTime: string;
+  }) => {
+    setEditingEventId(event.id);
+    const start = new Date(event.startTime);
+    const end = new Date(event.endTime);
+    eventForm.reset({
+      title: event.title,
+      type: event.type,
+      subject: event.subject || "",
+      date: format(start, "yyyy-MM-dd"),
+      startTime: format(start, "HH:mm"),
+      endTime: format(end, "HH:mm"),
     });
     setAddEventOpen(true);
   };
@@ -136,30 +161,32 @@ export default function Planning() {
     const start = new Date(`${values.date}T${values.startTime}:00`);
     const end = new Date(`${values.date}T${values.endTime}:00`);
 
-    createEvent.mutate(
-      {
-        data: {
-          title: values.title,
-          type: values.type as "studie" | "afspraak" | "vrij",
-          subject: values.subject || undefined,
-          startTime: start.toISOString(),
-          endTime: end.toISOString(),
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Event toegevoegd" });
-          eventForm.reset();
-          setAddEventOpen(false);
-        },
-        onError: (error) =>
-          toast({
-            title: "Fout bij toevoegen event",
-            description: extractErrorMessage(error),
-            variant: "destructive",
-          }),
-      },
-    );
+    const payload = {
+      title: values.title,
+      type: values.type as "studie" | "afspraak" | "vrij",
+      subject: values.subject || undefined,
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+    };
+
+    const onSuccess = () => {
+      toast({ title: editingEventId ? "Event bijgewerkt" : "Event toegevoegd" });
+      eventForm.reset();
+      setAddEventOpen(false);
+      setEditingEventId(null);
+    };
+    const onError = (error: unknown) =>
+      toast({
+        title: editingEventId ? "Fout bij bijwerken event" : "Fout bij toevoegen event",
+        description: extractErrorMessage(error),
+        variant: "destructive",
+      });
+
+    if (editingEventId) {
+      updateEvent.mutate({ id: editingEventId, data: payload }, { onSuccess, onError });
+    } else {
+      createEvent.mutate({ data: payload }, { onSuccess, onError });
+    }
   };
 
   // ─── Goal form ─────────────────────────────────────────────────────────
@@ -174,34 +201,55 @@ export default function Planning() {
     },
   });
 
+  const openEditGoal = (goal: {
+    id: number;
+    title: string;
+    subject: string;
+    targetDate: string;
+    hoursPerWeek: number;
+  }) => {
+    setEditingGoalId(goal.id);
+    goalForm.reset({
+      title: goal.title,
+      subject: goal.subject,
+      hoursPerWeek: goal.hoursPerWeek,
+      targetDate: format(parseISO(goal.targetDate), "yyyy-MM-dd"),
+    });
+    setAddGoalOpen(true);
+  };
+
   const onGoalSubmit = (values: z.infer<typeof goalSchema>) => {
-    // Ensure hoursPerWeek is a number (coerced by zod) and targetDate is ISO
     const payload = {
       title: values.title,
       subject: values.subject,
       hoursPerWeek: Number(values.hoursPerWeek),
       targetDate: new Date(values.targetDate).toISOString(),
     };
-    createGoal.mutate(
-      { data: payload },
-      {
-        onSuccess: () => {
-          toast({
-            title: "Doel toegevoegd",
-            description: "Klik 'AI Plan' om studieblokken in te plannen voor dit doel.",
-          });
-          goalForm.reset();
-          setAddGoalOpen(false);
-          refetchGoals();
-        },
-        onError: (error) =>
-          toast({
-            title: "Fout bij toevoegen doel",
-            description: extractErrorMessage(error),
-            variant: "destructive",
-          }),
-      },
-    );
+
+    const onSuccess = () => {
+      toast({
+        title: editingGoalId ? "Doel bijgewerkt" : "Doel toegevoegd",
+        description: editingGoalId
+          ? undefined
+          : "Klik 'AI Plan' om studieblokken in te plannen voor dit doel.",
+      });
+      goalForm.reset();
+      setAddGoalOpen(false);
+      setEditingGoalId(null);
+      refetchGoals();
+    };
+    const onError = (error: unknown) =>
+      toast({
+        title: editingGoalId ? "Fout bij bijwerken doel" : "Fout bij toevoegen doel",
+        description: extractErrorMessage(error),
+        variant: "destructive",
+      });
+
+    if (editingGoalId) {
+      updateGoal.mutate({ id: editingGoalId, data: payload }, { onSuccess, onError });
+    } else {
+      createGoal.mutate({ data: payload }, { onSuccess, onError });
+    }
   };
 
   const askCoachAboutGoal = (goal: { title: string; subject: string }) => {
@@ -269,15 +317,21 @@ export default function Planning() {
             AI Plan
           </Button>
 
-          <Dialog open={addEventOpen} onOpenChange={setAddEventOpen}>
+          <Dialog
+            open={addEventOpen}
+            onOpenChange={(open) => {
+              setAddEventOpen(open);
+              if (!open) setEditingEventId(null);
+            }}
+          >
             <DialogTrigger asChild>
-              <Button size="sm">
+              <Button size="sm" onClick={() => setEditingEventId(null)}>
                 <Plus className="h-4 w-4 mr-1" /> Nieuw Event
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Nieuw Event Toevoegen</DialogTitle>
+                <DialogTitle>{editingEventId ? "Event bewerken" : "Nieuw Event Toevoegen"}</DialogTitle>
               </DialogHeader>
               <Form {...eventForm}>
                 <form onSubmit={eventForm.handleSubmit(onEventSubmit)} className="space-y-4">
@@ -346,9 +400,15 @@ export default function Planning() {
                       </FormItem>
                     )} />
                   </div>
-                  <Button type="submit" className="w-full" disabled={createEvent.isPending}>
-                    {createEvent.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Toevoegen
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={createEvent.isPending || updateEvent.isPending}
+                  >
+                    {(createEvent.isPending || updateEvent.isPending) && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {editingEventId ? "Opslaan" : "Toevoegen"}
                   </Button>
                 </form>
               </Form>
@@ -438,6 +498,7 @@ export default function Planning() {
                               <button
                                 className="shrink-0"
                                 onClick={() => toggleEventComplete(event)}
+                                aria-label={event.completed ? "Markeer als niet voltooid" : "Markeer als voltooid"}
                               >
                                 {event.completed ? (
                                   <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -445,14 +506,19 @@ export default function Planning() {
                                   <Circle className="h-4 w-4" />
                                 )}
                               </button>
-                              <div className="flex-1 min-w-0">
-                                <span className={`font-medium ${event.completed ? "line-through" : ""}`}>
+                              <button
+                                type="button"
+                                onClick={() => openEditEvent(event)}
+                                className="flex-1 min-w-0 flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                                aria-label={`Bewerk ${event.title}`}
+                              >
+                                <span className={`font-medium truncate ${event.completed ? "line-through" : ""}`}>
                                   {event.title}
                                 </span>
                                 {event.subject && (
-                                  <span className="text-xs opacity-70 ml-1">({event.subject})</span>
+                                  <span className="text-xs opacity-70 shrink-0">({event.subject})</span>
                                 )}
-                              </div>
+                              </button>
                               <span className="text-xs opacity-70 shrink-0">
                                 {format(new Date(event.startTime), "HH:mm")}–{format(new Date(event.endTime), "HH:mm")}
                               </span>
@@ -461,6 +527,7 @@ export default function Planning() {
                                 size="icon"
                                 className="h-6 w-6 shrink-0 opacity-50 hover:opacity-100 hover:text-destructive"
                                 onClick={() => deleteEvent.mutate({ id: event.id })}
+                                aria-label="Verwijder event"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -493,15 +560,36 @@ export default function Planning() {
                   <Target className="h-5 w-5 text-primary" />
                   Studiedoelen
                 </CardTitle>
-                <Dialog open={addGoalOpen} onOpenChange={setAddGoalOpen}>
+                <Dialog
+                  open={addGoalOpen}
+                  onOpenChange={(open) => {
+                    setAddGoalOpen(open);
+                    if (!open) setEditingGoalId(null);
+                  }}
+                >
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
+                      onClick={() => {
+                        setEditingGoalId(null);
+                        goalForm.reset({
+                          title: "",
+                          subject: "",
+                          hoursPerWeek: 4,
+                          targetDate: new Date(new Date().setMonth(new Date().getMonth() + 1))
+                            .toISOString()
+                            .split("T")[0],
+                        });
+                      }}
+                    >
                       <Plus className="h-3 w-3 mr-1" /> Doel
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Nieuw Studiedoel</DialogTitle>
+                      <DialogTitle>{editingGoalId ? "Studiedoel bewerken" : "Nieuw Studiedoel"}</DialogTitle>
                     </DialogHeader>
                     <Form {...goalForm}>
                       <form onSubmit={goalForm.handleSubmit(onGoalSubmit)} className="space-y-4">
@@ -540,9 +628,15 @@ export default function Planning() {
                             </FormItem>
                           )} />
                         </div>
-                        <Button type="submit" className="w-full" disabled={createGoal.isPending}>
-                          {createGoal.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Doel Toevoegen
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={createGoal.isPending || updateGoal.isPending}
+                        >
+                          {(createGoal.isPending || updateGoal.isPending) && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          {editingGoalId ? "Opslaan" : "Doel Toevoegen"}
                         </Button>
                       </form>
                     </Form>
@@ -577,7 +671,12 @@ export default function Planning() {
                             <Circle className="h-4 w-4" />
                           )}
                         </button>
-                        <div className="flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openEditGoal(goal)}
+                          className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+                          aria-label={`Bewerk doel ${goal.title}`}
+                        >
                           <h4 className={`text-sm font-medium ${goal.status === "voltooid" ? "line-through text-muted-foreground" : ""}`}>
                             {goal.title}
                           </h4>
@@ -599,7 +698,7 @@ export default function Planning() {
                             </div>
                             <Progress value={goal.progress} className="h-1.5" />
                           </div>
-                        </div>
+                        </button>
                         <Button
                           variant="ghost"
                           size="icon"
