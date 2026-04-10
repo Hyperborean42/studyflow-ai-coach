@@ -72,9 +72,15 @@ router.post("/translate/speech", upload.single("audio"), async (req, res) => {
 
   try {
     // Step 1: Speech-to-Text (Google Cloud Speech v2, long model, multi-language)
+    console.log(`[translate] STT request — ${file.buffer.length} bytes, mime=${file.mimetype}, mode=${mode}`);
     const { text: sourceText, detectedLanguage } = await speechToText(file.buffer);
+    console.log(`[translate] STT result — text="${sourceText}" lang=${detectedLanguage || "unknown"}`);
+
     if (!sourceText) {
-      res.status(422).json({ error: "Kon geen spraak herkennen in de opname. Probeer opnieuw." });
+      res.status(422).json({
+        error:
+          "Ik kon geen woorden herkennen. Spreek iets luider en duidelijker, en probeer opnieuw. Zorg ook dat je meer dan 1 seconde spreekt.",
+      });
       return;
     }
 

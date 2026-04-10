@@ -130,23 +130,24 @@ export async function speechToText(audioBuffer: Buffer): Promise<{
 // ─── Text-to-Speech (Neural2 voices per language) ─────────────────────────
 
 // Chirp3 HD voices — Google's newest and most natural-sounding text-to-speech.
-// These are available at the global endpoint via the v1 synthesis API.
-// Fallback voices are older Wavenet/Neural2 if Chirp3 HD rejects the request.
+// Voice choice: "Leda" — youthful female voice, best approximation of a ~15yo
+// girl speaking naturally. Fallback is a higher-pitched Wavenet female voice
+// if Chirp3 HD isn't available for a given language.
 const TTS_VOICES: Record<SupportedLang, { languageCode: string; primary: string; fallback: string }> = {
   nl: {
     languageCode: "nl-NL",
-    primary: "nl-NL-Chirp3-HD-Achernar",
-    fallback: "nl-NL-Wavenet-E",
+    primary: "nl-NL-Chirp3-HD-Leda",
+    fallback: "nl-NL-Wavenet-D",
   },
   en: {
     languageCode: "en-US",
-    primary: "en-US-Chirp3-HD-Achernar",
-    fallback: "en-US-Neural2-F",
+    primary: "en-US-Chirp3-HD-Leda",
+    fallback: "en-US-Neural2-H",
   },
   it: {
     languageCode: "it-IT",
-    primary: "it-IT-Chirp3-HD-Achernar",
-    fallback: "it-IT-Wavenet-A",
+    primary: "it-IT-Chirp3-HD-Leda",
+    fallback: "it-IT-Wavenet-B",
   },
 };
 
@@ -157,13 +158,18 @@ async function synthesize(
 ): Promise<Response> {
   const token = await getAccessToken();
   const url = "https://texttospeech.googleapis.com/v1/text:synthesize";
+  // Chirp3 HD voices don't support pitch adjustment — they're already
+  // naturally voiced. Only standard Wavenet/Neural2 voices accept pitch.
+  const isChirp3 = voiceName.includes("Chirp3-HD");
   const body = {
     input: { text },
     voice: { languageCode, name: voiceName },
     audioConfig: {
       audioEncoding: "MP3",
-      speakingRate: 1.0,
-      pitch: 0.0,
+      // Slightly faster speaking rate — teens talk quicker than the default
+      speakingRate: 1.08,
+      // Raise pitch for older Wavenet/Neural2 fallbacks to sound younger
+      ...(isChirp3 ? {} : { pitch: 2.0 }),
     },
   };
 
