@@ -63,13 +63,15 @@ const STT_LANG_CODES: Record<SupportedLang, string> = {
 };
 
 /**
- * Transcribe audio using Google Cloud Speech-to-Text v2 with chirp_2 model.
- * Supports auto-language-detection across Dutch, English, and Italian.
+ * Transcribe audio using Google Cloud Speech-to-Text v2.
  *
- * Uses the 'eu' multi-region location: chirp_2 is not available at 'global',
- * and single regions (europe-west4) don't support multi-language recognition.
- * The 'eu' multi-region supports both. Accepts any browser-recorded audio
- * format (webm/opus from Chrome, mp4/aac from Safari) — v2 auto-decodes.
+ * Uses the 'global' location with the 'chirp' model, which supports
+ * multi-language recognition across Dutch, English, and Italian in a
+ * single request. Chirp 2 is too restricted for our multi-language needs
+ * (only works at specific single-regions which don't support multi-lang).
+ *
+ * Accepts any browser-recorded audio format (webm/opus from Chrome,
+ * mp4/aac from Safari) — v2 auto-decodes.
  */
 export async function speechToText(audioBuffer: Buffer): Promise<{
   text: string;
@@ -77,15 +79,14 @@ export async function speechToText(audioBuffer: Buffer): Promise<{
 }> {
   const token = await getAccessToken();
   const projectId = getProjectId();
-  const location = "eu";
 
-  const url = `https://${location}-speech.googleapis.com/v2/projects/${projectId}/locations/${location}/recognizers/_:recognize`;
+  const url = `https://speech.googleapis.com/v2/projects/${projectId}/locations/global/recognizers/_:recognize`;
 
   const body = {
     config: {
       autoDecodingConfig: {},
       languageCodes: ["nl-NL", "en-US", "it-IT"],
-      model: "chirp_2",
+      model: "chirp",
       features: {
         enableAutomaticPunctuation: true,
       },
