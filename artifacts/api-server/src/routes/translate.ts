@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import { askClaude } from "../lib/claude";
-import { speechToText, textToSpeech, type AudioInputFormat } from "../lib/openaiAudio";
+import { speechToText, textToSpeech, type SupportedLang } from "../lib/gcpAudio";
 
 const router: IRouter = Router();
 
@@ -10,19 +10,17 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
 });
 
-type SupportedLang = "nl" | "en" | "it";
-
 const TRANSLATE_SYSTEM_PROMPT = `You are a precise, context-aware translator for a bilingual child-friendly universal translator app.
 
-You will receive a transcribed phrase in Dutch, English, or Italian, plus the user's "primary language" (either "nl" or "en").
+You will receive a transcribed phrase in Dutch, English, or Italian, plus the user's "primary language" (either "nl" or "en"), plus a hint about the language the speech engine detected.
 
 Your job:
-1. Detect the source language (must be "nl", "en", or "it")
-2. If source is "it" (Italian), the target is the user's primary language ("nl" or "en")
-3. Otherwise (source is "nl" or "en"), the target is "it" (Italian)
-4. Translate naturally — preserve tone, use everyday conversational vocabulary suitable for a child
-5. Do NOT add explanations, greetings, or extra words — only the translation itself
-6. Preserve proper nouns and numbers unchanged
+1. Detect the actual source language from the text itself (the engine hint may be wrong — trust the text). Source language must be "nl", "en", or "it".
+2. If source is "it" (Italian), the target is the user's primary language ("nl" or "en").
+3. Otherwise (source is "nl" or "en"), the target is "it" (Italian).
+4. Translate naturally — preserve tone, use everyday conversational vocabulary suitable for a child.
+5. Do NOT add explanations, greetings, or extra words — only the translation itself.
+6. Preserve proper nouns and numbers unchanged.
 7. Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
 {"sourceLang":"nl","targetLang":"it","translatedText":"..."}
@@ -47,15 +45,6 @@ function parseTranslateResponse(raw: string): TranslateResult {
   return parsed;
 }
 
-function inferAudioFormat(mimeType: string | undefined): AudioInputFormat {
-  const mime = (mimeType || "").toLowerCase();
-  if (mime.includes("wav")) return "wav";
-  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
-  if (mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")) return "mp4";
-  if (mime.includes("ogg")) return "ogg";
-  return "webm"; // Chrome/Firefox default for MediaRecorder
-}
-
 router.post("/translate/speech", upload.single("audio"), async (req, res) => {
   const file = (req as unknown as { file?: Express.Multer.File }).file;
   if (!file) {
@@ -66,20 +55,20 @@ router.post("/translate/speech", upload.single("audio"), async (req, res) => {
   const primaryLanguage = (req.body?.primaryLanguage === "en" ? "en" : "nl") as "nl" | "en";
 
   try {
-    const format = inferAudioFormat(file.mimetype);
-    const sourceText = (await speechToText(file.buffer, format)).trim();
+    // Step 1: Speech-to-Text (Google Cloud Speech v2, chirp_2, multi-language)
+    const { text: sourceText, detectedLanguage } = await speechToText(file.buffer);
     if (!sourceText) {
-      res.status(422).json({ error: "Kon geen spraak herkennen in de opname." });
+      res.status(422).json({ error: "Kon geen spraak herkennen in de opname. Probeer opnieuw." });
       return;
     }
 
-    // Translate + detect language via Claude (one call)
+    // Step 2: Translate + detect language via Claude (text-based detection is more reliable)
     const claudeRaw = await askClaude(
       TRANSLATE_SYSTEM_PROMPT,
       [
         {
           role: "user",
-          content: `User primary language: ${primaryLanguage}\n\nTranscribed phrase:\n${sourceText}`,
+          content: `User primary language: ${primaryLanguage}\nSpeech engine language hint: ${detectedLanguage || "unknown"}\n\nTranscribed phrase:\n${sourceText}`,
         },
       ],
       { json: true },
@@ -87,8 +76,8 @@ router.post("/translate/speech", upload.single("audio"), async (req, res) => {
 
     const translated = parseTranslateResponse(claudeRaw);
 
-    // Generate speech — 'nova' works well across NL/EN/IT
-    const audioBuffer = await textToSpeech(translated.translatedText, "nova");
+    // Step 3: Text-to-Speech (Google Cloud TTS Neural2/Wavenet)
+    const audioBuffer = await textToSpeech(translated.translatedText, translated.targetLang);
     const audioBase64 = audioBuffer.toString("base64");
 
     res.json({

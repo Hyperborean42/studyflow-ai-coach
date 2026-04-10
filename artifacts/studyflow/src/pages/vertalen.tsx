@@ -4,10 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Mic, Square, Play, Share2, Trash2, Languages, Loader2, AlertCircle, Download,
+  Mic, Square, Play, Share2, Trash2, Languages, Loader2, AlertCircle, Download, Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +70,6 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 export default function Vertalen() {
   const { toast } = useToast();
-  const isMobile = useIsMobile();
 
   const [primaryLang, setPrimaryLang] = useState<"nl" | "en">(() => {
     const stored = localStorage.getItem(PRIMARY_LANG_KEY);
@@ -228,6 +226,11 @@ export default function Vertalen() {
 
   // ─── Sharing ────────────────────────────────────────────────────────────
 
+  /**
+   * Share the translated audio + text to any external app (WhatsApp, iMessage,
+   * email, etc.) via the native share sheet. Falls back to download on platforms
+   * that don't support Web Share with files (most desktop browsers).
+   */
   const shareAudio = async (entry: TranslationEntry) => {
     try {
       const blob = base64ToBlob(entry.audioBase64, entry.audioMimeType);
@@ -237,8 +240,14 @@ export default function Vertalen() {
         { type: entry.audioMimeType },
       );
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
+      // Prefer Web Share API with files (opens native share sheet on iOS/Android)
+      const nav = navigator as Navigator & {
+        canShare?: (data: ShareData) => boolean;
+        share?: (data: ShareData) => Promise<void>;
+      };
+
+      if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+        await nav.share({
           files: [file],
           title: "Vertaling",
           text: entry.targetText,
@@ -246,12 +255,39 @@ export default function Vertalen() {
         return;
       }
 
-      // Fallback: download
+      // Fallback 1: Web Share with just text (iOS Safari on older versions)
+      if (nav.share) {
+        try {
+          await nav.share({
+            title: "Vertaling",
+            text: entry.targetText,
+          });
+          // Still download the audio so they can attach it manually
+          downloadAudio(entry);
+          toast({
+            title: "Audio gedownload",
+            description: "De tekst is gedeeld en het audiobestand is gedownload.",
+          });
+          return;
+        } catch {
+          /* fall through to download */
+        }
+      }
+
+      // Fallback 2: pure download (desktop)
       downloadAudio(entry);
+      toast({
+        title: "Audio gedownload",
+        description: "Open WhatsApp/e-mail en voeg het bestand toe als bijlage.",
+      });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("Share error:", err);
-      toast({ title: "Delen mislukt", description: "Gebruik download als alternatief.", variant: "destructive" });
+      toast({
+        title: "Delen mislukt",
+        description: "Probeer de download-knop.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -265,6 +301,15 @@ export default function Vertalen() {
     URL.revokeObjectURL(url);
   };
 
+  const copyText = async (entry: TranslationEntry) => {
+    try {
+      await navigator.clipboard.writeText(entry.targetText);
+      toast({ title: "Gekopieerd", description: "Vertaling staat op het klembord." });
+    } catch {
+      toast({ title: "Kopiëren mislukt", variant: "destructive" });
+    }
+  };
+
   // ─── Entry management ─────────────────────────────────────────────────
 
   const clearHistory = () => {
@@ -274,11 +319,6 @@ export default function Vertalen() {
   };
 
   // ─── Render ────────────────────────────────────────────────────────────
-
-  const canShareFiles =
-    typeof navigator !== "undefined" &&
-    "canShare" in navigator &&
-    "share" in navigator;
 
   return (
     <div className="h-full flex flex-col">
@@ -359,34 +399,42 @@ export default function Vertalen() {
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 pt-1">
+                    {/* Actions — Delen is primary, always visible */}
+                    <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8 text-xs flex-1 min-w-[110px]"
+                        onClick={() => shareAudio(entry)}
+                      >
+                        <Share2 className="h-3.5 w-3.5 mr-1.5" /> Stuur audio
+                      </Button>
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="h-7 text-[11px]"
+                        className="h-8 text-xs"
                         onClick={() => playAudio(entry)}
+                        aria-label="Afspelen"
                       >
-                        <Play className="h-3 w-3 mr-1" /> Afspelen
+                        <Play className="h-3.5 w-3.5" />
                       </Button>
-                      {canShareFiles && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px]"
-                          onClick={() => shareAudio(entry)}
-                        >
-                          <Share2 className="h-3 w-3 mr-1" /> Delen
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => copyText(entry)}
+                        aria-label="Kopieer tekst"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-[11px]"
+                        className="h-8 text-xs"
                         onClick={() => downloadAudio(entry)}
+                        aria-label="Download"
                       >
-                        <Download className="h-3 w-3 mr-1" />
-                        {isMobile ? "" : "Download"}
+                        <Download className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
