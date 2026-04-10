@@ -30,6 +30,7 @@ import {
   useUpdateStudyGoal,
   useDeleteStudyGoal,
 } from "@workspace/api-client-react";
+import { getEventColor } from "@/lib/event-utils";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -48,19 +49,6 @@ const eventSchema = z.object({
   startTime: z.string().min(1, "Starttijd is verplicht"),
   endTime: z.string().min(1, "Eindtijd is verplicht"),
 });
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function getEventColor(type: string) {
-  switch (type) {
-    case "studie": return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300";
-    case "toets":
-    case "examen": return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300";
-    case "afspraak": return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300";
-    case "vrij": return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300";
-    default: return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300";
-  }
-}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -417,13 +405,31 @@ export default function Planning() {
         </div>
       </header>
 
-      {/* AI reschedule message */}
-      {isRescheduling && rescheduleMessage && (
+      {/* AI reschedule message — visible after the request completes */}
+      {rescheduleMessage && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="pt-4 pb-4">
             <div className="flex gap-3">
-              <Loader2 className="h-4 w-4 text-primary animate-spin mt-0.5 shrink-0" />
-              <div className="text-sm whitespace-pre-wrap">{rescheduleMessage}</div>
+              {isRescheduling ? (
+                <Loader2 className="h-4 w-4 text-primary animate-spin mt-0.5 shrink-0" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-muted-foreground mb-0.5">
+                  Voor week van {format(startDate, "d MMM", { locale: nl })}
+                </p>
+                <div className="text-sm whitespace-pre-wrap">{rescheduleMessage}</div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={() => setRescheduleMessage("")}
+                aria-label="Sluit bericht"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -481,11 +487,11 @@ export default function Planning() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-[11px] opacity-60 hover:opacity-100"
+                          className="h-7 px-2 text-[11px] text-primary"
                           onClick={() => openAddEventForDay(day)}
                           aria-label={`Voeg item toe op ${format(day, "EEEE d MMM", { locale: nl })}`}
                         >
-                          <Plus className="h-3 w-3 mr-0.5" /> Toevoegen
+                          <Plus className="h-3.5 w-3.5 mr-0.5" /> Toevoegen
                         </Button>
                       </div>
                       {dayEvents.length > 0 ? (
@@ -525,8 +531,12 @@ export default function Planning() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 shrink-0 opacity-50 hover:opacity-100 hover:text-destructive"
-                                onClick={() => deleteEvent.mutate({ id: event.id })}
+                                className="h-6 w-6 shrink-0 opacity-60 hover:opacity-100 hover:text-destructive"
+                                onClick={() => {
+                                  if (confirm(`"${event.title}" verwijderen?`)) {
+                                    deleteEvent.mutate({ id: event.id });
+                                  }
+                                }}
                                 aria-label="Verwijder event"
                               >
                                 <Trash2 className="h-3 w-3" />
@@ -703,7 +713,12 @@ export default function Planning() {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 shrink-0 text-destructive/50 hover:text-destructive"
-                          onClick={() => deleteGoal.mutate({ id: goal.id }, { onSuccess: () => refetchGoals() })}
+                          onClick={() => {
+                            if (confirm(`Doel "${goal.title}" verwijderen?`)) {
+                              deleteGoal.mutate({ id: goal.id }, { onSuccess: () => refetchGoals() });
+                            }
+                          }}
+                          aria-label="Verwijder doel"
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>

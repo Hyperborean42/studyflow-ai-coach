@@ -7,6 +7,7 @@ import {
   Mic, Square, Play, Share2, Trash2, Languages, Loader2, AlertCircle, Download, Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useGetSettings } from "@workspace/api-client-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,8 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 export default function Vertalen() {
   const { toast } = useToast();
+  const { data: settings } = useGetSettings();
+  const autoPlayEnabled = settings?.voiceEnabled !== false; // default true if undefined
 
   const [primaryLang, setPrimaryLang] = useState<"nl" | "en">(() => {
     const stored = localStorage.getItem(PRIMARY_LANG_KEY);
@@ -197,8 +200,10 @@ export default function Vertalen() {
       };
       setEntries((prev) => [...prev, entry]);
 
-      // Auto-play the translated audio
-      playAudio(entry);
+      // Auto-play the translated audio if voice output is enabled in settings
+      if (autoPlayEnabled) {
+        playAudio(entry);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Vertaling mislukt.";
       toast({ title: "Fout", description: message, variant: "destructive" });

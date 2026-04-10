@@ -24,21 +24,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
         <nav className="border-t border-border/50 bg-background/95 backdrop-blur-sm safe-area-bottom">
-          <div className="flex items-center justify-around py-1.5">
+          <div className="flex items-center justify-around py-2">
             {navItems.map((item) => {
               const isActive = location === item.href;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] transition-colors active:scale-95 ${
+                  className={`flex flex-col items-center gap-0.5 px-2 py-2 min-h-[48px] min-w-[48px] rounded-lg text-[10px] transition-colors active:scale-95 ${
                     isActive
-                      ? "text-primary font-medium"
+                      ? "text-primary font-medium bg-primary/10"
                       : "text-muted-foreground"
                   }`}
                   data-testid={`nav-${item.name.toLowerCase()}`}
                 >
-                  <item.icon className={`h-4.5 w-4.5 ${isActive ? "text-primary" : ""}`} />
+                  <item.icon className="h-5 w-5" />
                   <span>{item.name}</span>
                 </Link>
               );

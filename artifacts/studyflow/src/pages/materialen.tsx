@@ -21,10 +21,12 @@ import { cn } from "@/lib/utils";
 import {
   useListStudyMaterials,
   useCreateStudyMaterial,
+  useDeleteStudyMaterial,
   useGenerateQuiz,
   type QuizQuestion,
   type Quiz
 } from "@workspace/api-client-react";
+import { Trash2 } from "lucide-react";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
 
 const uploadSchema = z.object({
@@ -62,7 +64,30 @@ export default function Materialen() {
 
   const { data: materials = [], refetch: refetchMaterials } = useListStudyMaterials();
   const createMaterial = useCreateStudyMaterial();
+  const deleteMaterial = useDeleteStudyMaterial();
   const generateQuiz = useGenerateQuiz();
+
+  // Track which difficulty is being generated so the spinner shows on the right button
+  const [pendingDifficulty, setPendingDifficulty] = useState<"makkelijk" | "gemiddeld" | "moeilijk" | null>(null);
+
+  const handleDeleteMaterial = (id: number, title: string) => {
+    if (!confirm(`Materiaal "${title}" verwijderen?`)) return;
+    deleteMaterial.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: "Verwijderd", description: `"${title}" is verwijderd.` });
+          if (activeMaterialId === id) {
+            setActiveMaterialId(null);
+            setSummary("");
+            setQuizData(null);
+          }
+          refetchMaterials();
+        },
+        onError: () => toast({ title: "Verwijderen mislukt", variant: "destructive" }),
+      },
+    );
+  };
 
   const uploadForm = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -159,6 +184,7 @@ export default function Materialen() {
   const handleGenerateQuiz = (difficulty: 'makkelijk' | 'gemiddeld' | 'moeilijk') => {
     if (!activeMaterialId) return;
 
+    setPendingDifficulty(difficulty);
     generateQuiz.mutate({
       id: activeMaterialId,
       data: { difficulty, numQuestions: 5 }
@@ -167,9 +193,11 @@ export default function Materialen() {
         resetQuizSession();
         setQuizData(data);
         setActiveTab("quiz");
-        toast({ title: "Quiz gegenereerd", description: "Succesvol 5 vragen gemaakt." });
+        setPendingDifficulty(null);
+        toast({ title: "Quiz gegenereerd", description: "5 nieuwe vragen staan klaar." });
       },
       onError: () => {
+        setPendingDifficulty(null);
         toast({ title: "Fout", description: "Kon quiz niet genereren.", variant: "destructive" });
       }
     });
@@ -318,6 +346,15 @@ export default function Materialen() {
                       onClick={() => handleChatAboutMaterial(material.title)}
                     >
                       <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 flex-shrink-0 text-destructive/50 hover:text-destructive"
+                      title="Verwijder materiaal"
+                      onClick={() => handleDeleteMaterial(material.id, material.title)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 ))}
@@ -611,15 +648,32 @@ export default function Materialen() {
                           <p className="text-sm text-muted-foreground">Genereer oefenvragen gebaseerd op deze tekst om je kennis te testen.</p>
 
                           <div className="space-y-3 pt-4 border-t">
-                            <Button variant="outline" className="w-full justify-between" onClick={() => handleGenerateQuiz('makkelijk')} disabled={generateQuiz.isPending}>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between"
+                              onClick={() => handleGenerateQuiz('makkelijk')}
+                              disabled={generateQuiz.isPending}
+                            >
                               Makkelijk (Begrippen)
-                              {generateQuiz.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                              {pendingDifficulty === "makkelijk" && <Loader2 className="h-4 w-4 animate-spin" />}
                             </Button>
-                            <Button variant="outline" className="w-full justify-between" onClick={() => handleGenerateQuiz('gemiddeld')} disabled={generateQuiz.isPending}>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between"
+                              onClick={() => handleGenerateQuiz('gemiddeld')}
+                              disabled={generateQuiz.isPending}
+                            >
                               Gemiddeld (Toepassing)
+                              {pendingDifficulty === "gemiddeld" && <Loader2 className="h-4 w-4 animate-spin" />}
                             </Button>
-                            <Button variant="outline" className="w-full justify-between" onClick={() => handleGenerateQuiz('moeilijk')} disabled={generateQuiz.isPending}>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between"
+                              onClick={() => handleGenerateQuiz('moeilijk')}
+                              disabled={generateQuiz.isPending}
+                            >
                               Moeilijk (Inzicht)
+                              {pendingDifficulty === "moeilijk" && <Loader2 className="h-4 w-4 animate-spin" />}
                             </Button>
                           </div>
                         </CardContent>

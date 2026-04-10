@@ -21,7 +21,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import {
   Send, Lightbulb, Loader2, Sparkles, Maximize2,
   MessageSquare, ArrowRight, AlertTriangle, Clock,
-  Flame, Target, GraduationCap, ChevronRight
+  Flame, Target, GraduationCap, ChevronRight, Circle, CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpeechButton } from "@/components/speech-button";
@@ -35,7 +35,9 @@ import {
   useUpdateCalendarEvent,
   useCreateOpenaiConversation,
   useListOpenaiConversations,
+  useGetSettings,
 } from "@workspace/api-client-react";
+import { getEventColor } from "@/lib/event-utils";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -65,16 +67,6 @@ function getPriorityBadgeVariant(priority: string): "destructive" | "outline" | 
     case "high": return "destructive";
     case "medium": return "outline";
     default: return "secondary";
-  }
-}
-
-function getEventColor(type: string) {
-  switch (type) {
-    case "studie": return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300";
-    case "toets":
-    case "examen": return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300";
-    case "afspraak": return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300";
-    default: return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300";
   }
 }
 
@@ -108,6 +100,9 @@ export default function Dashboard() {
   const { data: progress } = useGetProgress();
   const { data: weakPoints = [] } = useGetWeakPoints();
   const { data: streak } = useGetStudyStreak();
+  const { data: settings } = useGetSettings();
+  const userName = settings?.userName || "";
+  const greeting = userName ? `Welkom terug, ${userName}!` : "Welkom terug!";
   const updateEvent = useUpdateCalendarEvent({
     mutation: {
       onMutate: async () => {
@@ -270,11 +265,18 @@ export default function Dashboard() {
           </div>
         ) : todayEvents.length > 0 ? (
           todayEvents.map((event: { id: number; type: string; completed: boolean; title: string; startTime: string; subject?: string }) => (
-            <div
+            <button
+              type="button"
               key={event.id}
-              className={`flex items-center gap-2 py-1.5 px-2 rounded-md border text-xs cursor-pointer transition-all duration-100 active:scale-[0.98] ${getEventColor(event.type)} ${event.completed ? "opacity-50 line-through" : ""}`}
+              className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-md border text-xs cursor-pointer transition-all duration-100 active:scale-[0.98] text-left ${getEventColor(event.type)} ${event.completed ? "opacity-50 line-through" : ""}`}
               onClick={() => toggleEventComplete(event)}
+              aria-label={event.completed ? `Markeer ${event.title} als niet voltooid` : `Markeer ${event.title} als voltooid`}
             >
+              {event.completed ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+              ) : (
+                <Circle className="h-3.5 w-3.5 shrink-0" />
+              )}
               <span className="font-mono opacity-70 w-9 shrink-0">
                 {format(new Date(event.startTime), "HH:mm")}
               </span>
@@ -282,10 +284,10 @@ export default function Dashboard() {
               {event.subject && (
                 <Badge variant="outline" className="text-[9px] shrink-0">{event.subject}</Badge>
               )}
-            </div>
+            </button>
           ))
         ) : (
-          <p className="text-xs text-muted-foreground italic">Geen items vandaag.</p>
+          <p className="text-xs text-muted-foreground italic">Vrije dag! Tijd om voor te lopen.</p>
         )}
 
         {tomorrowEvents.length > 0 && (
@@ -361,13 +363,23 @@ export default function Dashboard() {
         </div>
         <p className="text-[10px] text-muted-foreground">Streak</p>
       </Card>
-      <Card className="text-center p-2">
-        <div className="flex items-center justify-center gap-1 mb-0.5">
-          <Target className="h-3.5 w-3.5 text-primary" />
-          <span className="text-lg font-bold">{progress?.completedGoals || 0}/{progress?.totalGoals || 0}</span>
-        </div>
-        <p className="text-[10px] text-muted-foreground">Doelen</p>
-      </Card>
+      <button
+        type="button"
+        onClick={() => navigate("/planning")}
+        className="text-left"
+      >
+        <Card className="text-center p-2 hover:bg-muted/40 transition-colors">
+          <div className="flex items-center justify-center gap-1 mb-0.5">
+            <Target className="h-3.5 w-3.5 text-primary" />
+            <span className="text-lg font-bold">
+              {progress?.totalGoals
+                ? `${progress.completedGoals || 0}/${progress.totalGoals}`
+                : "—"}
+            </span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Doelen</p>
+        </Card>
+      </button>
       <Card className="text-center p-2">
         <div className="flex items-center justify-center gap-1 mb-0.5">
           <Clock className="h-3.5 w-3.5 text-blue-500" />
@@ -632,7 +644,7 @@ export default function Dashboard() {
       <div className="h-full flex flex-col space-y-3">
         {expandedCoach}
         <header>
-          <h1 className="text-lg font-bold">Welkom terug!</h1>
+          <h1 className="text-lg font-bold">{greeting}</h1>
           <p className="text-muted-foreground text-xs">
             {format(now, "EEE d MMMM", { locale: nl })}
           </p>
@@ -656,7 +668,7 @@ export default function Dashboard() {
     <div className="h-full flex flex-col space-y-5">
       {expandedCoach}
       <header>
-        <h1 className="text-3xl font-bold">Welkom terug!</h1>
+        <h1 className="text-3xl font-bold">{greeting}</h1>
         <p className="text-muted-foreground mt-0.5">
           {format(now, "EEEE d MMMM yyyy", { locale: nl })}
         </p>
