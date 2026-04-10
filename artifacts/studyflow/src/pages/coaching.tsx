@@ -33,8 +33,11 @@ import {
   useCreateOpenaiConversation,
   useListOpenaiConversations,
   useListOpenaiMessages,
+  useDeleteOpenaiConversation,
 } from "@workspace/api-client-react";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
+import { useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 
 export default function Coaching() {
   const { toast } = useToast();
@@ -47,8 +50,9 @@ export default function Coaching() {
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
   const [autoPlay, setAutoPlay] = useState<boolean>(() => {
-    const stored = localStorage.getItem(AUTOPLAY_KEY);
-    return stored === null ? true : stored === "true";
+    // Default OFF — user must explicitly enable to save tokens and respect
+    // their environment (class, quiet spaces).
+    return localStorage.getItem(AUTOPLAY_KEY) === "true";
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -65,8 +69,10 @@ export default function Coaching() {
     });
   };
 
+  const queryClient = useQueryClient();
   const { data: conversations = [], refetch: refetchConversations } = useListOpenaiConversations();
   const createConversation = useCreateOpenaiConversation();
+  const deleteConversation = useDeleteOpenaiConversation();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
   // Only load history when user explicitly switches to an older conversation
@@ -173,6 +179,30 @@ export default function Coaching() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchString, navParamsHandled]);
 
+  const handleDeleteCurrentConversation = () => {
+    if (!activeConversationId) return;
+    if (!confirm("Dit gesprek verwijderen?")) return;
+    deleteConversation.mutate(
+      { id: activeConversationId },
+      {
+        onSuccess: async () => {
+          setActiveConversationId(null);
+          setMessages([]);
+          // Invalidate conversation list so the dropdown updates
+          await queryClient.invalidateQueries({
+            predicate: (q) => {
+              const key = q.queryKey[0];
+              return typeof key === "string" && key.toLowerCase().includes("openai");
+            },
+          });
+          refetchConversations();
+          toast({ title: "Gesprek verwijderd" });
+        },
+        onError: () => toast({ title: "Kon gesprek niet verwijderen", variant: "destructive" }),
+      },
+    );
+  };
+
   const handleNewConversation = () => {
     createConversation.mutate(
       { data: { title: `Coach ${new Date().toLocaleDateString("nl-NL")}` } },
@@ -253,19 +283,32 @@ export default function Coaching() {
             )}
           </Button>
           {conversations.length > 1 && (
-            <select
-              className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background max-w-[100px] md:max-w-none h-8"
-              value={activeConversationId || ""}
-              onChange={(e) => {
-                setActiveConversationId(Number(e.target.value));
-                setMessages([]);
-                setLoadHistory(true);
-              }}
-            >
-              {conversations.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
+            <>
+              <select
+                className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background max-w-[100px] md:max-w-none h-8"
+                value={activeConversationId || ""}
+                onChange={(e) => {
+                  setActiveConversationId(Number(e.target.value));
+                  setMessages([]);
+                  setLoadHistory(true);
+                }}
+              >
+                {conversations.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-destructive/60 hover:text-destructive"
+                onClick={handleDeleteCurrentConversation}
+                disabled={!activeConversationId || deleteConversation.isPending}
+                title="Verwijder huidig gesprek"
+                aria-label="Verwijder huidig gesprek"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" className="text-xs h-8 w-8 p-0 md:w-auto md:px-3" onClick={handleNewConversation} title="Nieuw gesprek">
             <RotateCcw className="h-3.5 w-3.5 md:mr-1" />

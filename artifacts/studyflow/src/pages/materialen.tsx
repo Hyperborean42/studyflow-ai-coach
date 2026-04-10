@@ -600,7 +600,8 @@ export default function Materialen() {
                         </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        {activeMaterial.fileType === "pptx" && (
+                        {(activeMaterial.fileType === "pptx" ||
+                          /\[Slide \d+\]|\[Page \d+\]/.test(activeMaterial.content || "")) && (
                           <Button
                             variant="default"
                             size="sm"
@@ -621,17 +622,28 @@ export default function Materialen() {
                       </div>
                     </div>
 
-                    {/* Raw content viewer */}
+                    {/* Raw content viewer — grows with viewport */}
                     <Card className="shadow-none">
-                      <CardHeader className="pb-2">
+                      <CardHeader className="pb-2 flex flex-row items-center justify-between">
                         <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
                           <FileText className="h-4 w-4" />
                           Inhoud
                         </CardTitle>
+                        {(activeMaterial.fileType === "pptx" ||
+                          /\[Slide \d+\]|\[Page \d+\]/.test(activeMaterial.content || "")) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setSlideViewerOpen(true)}
+                          >
+                            Volledig scherm
+                          </Button>
+                        )}
                       </CardHeader>
                       <CardContent>
-                        <ScrollArea className="h-[300px] rounded-md border bg-muted/30 p-4">
-                          <Markdown compact className="text-sm">
+                        <ScrollArea className="h-[60vh] md:h-[500px] rounded-md border bg-muted/30 p-3 md:p-4">
+                          <Markdown compact className="text-sm md:text-base break-words">
                             {activeMaterial.content || "_Geen inhoud beschikbaar._"}
                           </Markdown>
                         </ScrollArea>

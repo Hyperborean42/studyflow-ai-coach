@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Bell, User, Volume2, Loader2, Save, Trash2, MessageCircle } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { 
   useGetSettings,
@@ -34,6 +35,7 @@ const notificationSchema = z.object({
 
 export default function Instellingen() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isPurging, setIsPurging] = useState(false);
 
   const { data: settings, isLoading: loadingSettings } = useGetSettings();
@@ -48,6 +50,16 @@ export default function Instellingen() {
       });
       if (!res.ok) throw new Error("Verwijderen mislukt");
       const data = await res.json();
+
+      // Invalidate all conversation-related queries so the dropdown in Coaching
+      // and the mini coach on Dashboard immediately reflect the empty state.
+      await queryClient.invalidateQueries({
+        predicate: (q) => {
+          const key = q.queryKey[0];
+          return typeof key === "string" && key.toLowerCase().includes("openai");
+        },
+      });
+
       toast({
         title: "Gesprekken verwijderd",
         description: `${data.deletedCount ?? 0} gesprekken zijn gewist.`,

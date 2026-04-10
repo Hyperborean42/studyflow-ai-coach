@@ -4,12 +4,42 @@ import { textToSpeech } from "../lib/gcpAudio";
 
 const router: IRouter = Router();
 
-const SUMMARIZE_PROMPT = `Je krijgt een bericht van een AI-studiecoach. Vat het kort samen in MAXIMAAL 2 zinnen,
-natuurlijk Nederlands, informeel (je/jij). Geen opsomming, geen markdown, geen uitleg — alleen de
-kern, zoals je het tegen een 16-jarige zou zeggen. Antwoord ALLEEN met de samenvatting zelf.`;
+const SUMMARIZE_PROMPT = `Je krijgt een bericht van een studiecoach. Vat het kort samen in MAXIMAAL 2 zinnen,
+natuurlijk Nederlands, informeel (je/jij). Geen opsomming, geen markdown, geen kopjes, geen uitleg —
+alleen de kern, zoals je het tegen een 16-jarige zou zeggen. Antwoord ALLEEN met de samenvatting zelf.`;
 
 const MAX_INPUT_CHARS = 4000;
 const MAX_TTS_CHARS = 400;
+
+/**
+ * Strip markdown and formatting symbols so the TTS engine doesn't read
+ * "sterretje sterretje vet sterretje sterretje" or pronounce list bullets.
+ */
+function sanitizeForTts(text: string): string {
+  return text
+    // Remove markdown code fences + inline code backticks
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]*)`/g, "$1")
+    // Remove bold/italic markers (**text**, __text__, *text*, _text_)
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/(?<![a-zA-Z])_([^_]+)_(?![a-zA-Z])/g, "$1")
+    // Remove heading markers
+    .replace(/^#+\s+/gm, "")
+    // Convert bullet points to natural pauses
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    // Remove horizontal rules
+    .replace(/^[-=]{3,}$/gm, "")
+    // Collapse multiple newlines/spaces
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    // Remove stray markdown/special chars that shouldn't be spoken
+    .replace(/[#*`~_>|]/g, "")
+    .trim();
+}
 
 router.post("/coach/speak", async (req, res) => {
   const rawText = typeof req.body?.text === "string" ? req.body.text : "";
@@ -32,6 +62,9 @@ router.post("/coach/speak", async (req, res) => {
         console.error("Coach speak: summarize failed, falling back to raw text", err);
       }
     }
+
+    // Sanitize: strip markdown/symbols before TTS reads the text
+    spoken = sanitizeForTts(spoken);
 
     // Guardrail: cap TTS input length to keep audio short and costs bounded
     if (spoken.length > MAX_TTS_CHARS) {

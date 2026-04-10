@@ -6,11 +6,12 @@ import {
 
 interface Slide {
   number: string;
+  label: string; // "Slide" or "Pagina"
   content: string;
 }
 
 interface SlideViewerProps {
-  /** Raw content with [Slide N] markers */
+  /** Raw content with [Slide N] or [Page N] markers */
   content: string;
   title: string;
   subject?: string;
@@ -18,21 +19,28 @@ interface SlideViewerProps {
   onClose: () => void;
 }
 
-/** Parse "[Slide N]\n..." blocks into structured slides */
+/** Parse "[Slide N]..." or "[Page N]..." blocks into structured slides */
 function parseSlides(content: string): Slide[] {
-  const parts = content.split(/\[Slide (\d+)\]\n?/);
+  // Detect which marker format is in use (PPTX emits [Slide N], PDF emits [Page N])
+  const hasSlide = /\[Slide \d+\]/.test(content);
+  const hasPage = /\[Page \d+\]/.test(content);
+  const label = hasSlide ? "Slide" : hasPage ? "Pagina" : "Slide";
+
+  const pattern = hasSlide ? /\[Slide (\d+)\]\n?/ : /\[Page (\d+)\]\n?/;
+  const parts = content.split(pattern);
   const slides: Slide[] = [];
-  // parts: ["", "1", "slide1 content", "2", "slide2 content", ...]
+
   for (let i = 1; i < parts.length; i += 2) {
     const num = parts[i];
     const text = (parts[i + 1] || "").trim();
     if (text) {
-      slides.push({ number: num, content: text });
+      slides.push({ number: num, label, content: text });
     }
   }
+
   // If no slides found, treat entire content as one slide
   if (slides.length === 0 && content.trim()) {
-    slides.push({ number: "1", content: content.trim() });
+    slides.push({ number: "1", label, content: content.trim() });
   }
   return slides;
 }
@@ -125,9 +133,9 @@ export function SlideViewer({ content, title, subject, open, onClose }: SlideVie
             {subject && <p className="text-xs text-muted-foreground">{subject}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm text-muted-foreground font-mono">
-            {currentSlide + 1} / {slides.length}
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          <span className="text-xs md:text-sm text-muted-foreground font-mono whitespace-nowrap">
+            {slides[currentSlide].label} {currentSlide + 1}/{slides.length}
           </span>
           <Button
             variant="outline"
@@ -159,19 +167,19 @@ export function SlideViewer({ content, title, subject, open, onClose }: SlideVie
         />
       </div>
 
-      {/* Slide content */}
-      <div className="flex-1 flex items-center justify-center p-8 overflow-auto">
-        <div className="max-w-4xl w-full">
-          <div className="bg-card border rounded-2xl shadow-lg p-8 md:p-12 min-h-[50vh] flex flex-col justify-center">
+      {/* Slide content — scrollable, responsive, works in portrait + landscape */}
+      <div className="flex-1 overflow-y-auto p-3 md:p-8">
+        <div className="max-w-4xl w-full mx-auto">
+          <div className="bg-card border rounded-xl md:rounded-2xl shadow-lg p-4 md:p-8 lg:p-12 min-h-full">
             {/* Parse slide text into visual structure */}
             {slide.content.split("\n").map((line, i) => {
               const trimmed = line.trim();
-              if (!trimmed) return <div key={i} className="h-4" />;
+              if (!trimmed) return <div key={i} className="h-3 md:h-4" />;
 
               // Section header (LEEFOMGEVING > Wateroverlast > ...)
               if (trimmed.includes(" > ")) {
                 return (
-                  <p key={i} className="text-xs uppercase tracking-wider text-muted-foreground mb-4">
+                  <p key={i} className="text-[10px] md:text-xs uppercase tracking-wider text-muted-foreground mb-2 md:mb-4">
                     {trimmed}
                   </p>
                 );
@@ -180,7 +188,7 @@ export function SlideViewer({ content, title, subject, open, onClose }: SlideVie
               // Short lines that look like headings (no period, under 80 chars)
               if (trimmed.length < 80 && !trimmed.endsWith(".") && !trimmed.endsWith("?") && !trimmed.startsWith("-")) {
                 return (
-                  <h3 key={i} className="text-2xl font-bold text-primary mb-3 mt-2">
+                  <h3 key={i} className="text-lg md:text-xl lg:text-2xl font-bold text-primary mb-2 md:mb-3 mt-2 break-words">
                     {trimmed}
                   </h3>
                 );
@@ -189,7 +197,7 @@ export function SlideViewer({ content, title, subject, open, onClose }: SlideVie
               // Questions (end with ?)
               if (trimmed.endsWith("?")) {
                 return (
-                  <p key={i} className="text-lg font-medium text-foreground mb-2 italic">
+                  <p key={i} className="text-base md:text-lg font-medium text-foreground mb-2 italic break-words">
                     {trimmed}
                   </p>
                 );
@@ -197,7 +205,7 @@ export function SlideViewer({ content, title, subject, open, onClose }: SlideVie
 
               // Regular text
               return (
-                <p key={i} className="text-base leading-relaxed text-foreground/90 mb-2">
+                <p key={i} className="text-sm md:text-base leading-relaxed text-foreground/90 mb-2 break-words">
                   {trimmed}
                 </p>
               );

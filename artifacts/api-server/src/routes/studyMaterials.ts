@@ -40,14 +40,26 @@ async function extractTextFromFile(buffer: Buffer, filename: string): Promise<st
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   // unpdf is a lightweight, dependency-free PDF text extractor that works
-  // in Node + esbuild bundles (unlike pdf-parse which has debug-mode issues).
+  // in Node + esbuild bundles. We extract per-page to inject [Page N] markers
+  // so the SlideViewer can paginate PDF content just like .pptx slides.
   const { getDocumentProxy, extractText } = await import("unpdf");
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const result = await extractText(pdf, { mergePages: true });
-  const text = result.text as unknown;
-  if (typeof text === "string") return text;
-  if (Array.isArray(text)) return (text as string[]).join("\n\n");
-  return String(text ?? "");
+  const result = await extractText(pdf, { mergePages: false });
+  const rawText = result.text as unknown;
+  const pages: string[] = Array.isArray(rawText)
+    ? (rawText as string[])
+    : typeof rawText === "string"
+      ? [rawText]
+      : [];
+
+  return pages
+    .map((pageText, i) => {
+      const trimmed = (pageText || "").trim();
+      if (!trimmed) return "";
+      return `[Page ${i + 1}]\n${trimmed}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function extractPptxText(buffer: Buffer): string {
