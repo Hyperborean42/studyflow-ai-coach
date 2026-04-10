@@ -13,21 +13,30 @@ const upload = multer({
 const TRANSLATE_SYSTEM_PROMPT = `You are a precise, context-aware translator for a child-friendly universal translator app.
 
 You will receive:
-- A transcribed phrase (language unknown, may be Dutch, English, or Italian)
-- A "mode" that defines the language pair: "nl-it", "en-it", or "nl-en"
+- A transcribed phrase (may be Dutch, English, or Italian)
+- A "mode" that defines the language pair (see modes below)
 - A hint from the speech engine about the detected language (may be wrong)
 
+MODES — bidirectional auto-detect (translate FROM detected source TO the other):
+- "nl-it": nl ↔ it. Source nl → target it. Source it → target nl.
+- "en-it": en ↔ it. Source en → target it. Source it → target en.
+- "nl-en": nl ↔ en. Source nl → target en. Source en → target nl.
+
+MODES — fixed direction (sourceLang ALWAYS matches first, targetLang ALWAYS matches second):
+- "en-to-it": source MUST be "en", target MUST be "it"
+- "it-to-nl": source MUST be "it", target MUST be "nl"
+- "it-to-en": source MUST be "it", target MUST be "en"
+- "nl-to-it": source MUST be "nl", target MUST be "it"
+- "nl-to-en": source MUST be "nl", target MUST be "en"
+- "en-to-nl": source MUST be "en", target MUST be "nl"
+
 Your job:
-1. Detect the actual source language from the text itself (trust the text over the engine hint). Must be "nl", "en", or "it".
-2. The target language is the OTHER language in the pair:
-   - mode "nl-it": nl ↔ it. Source nl → target it. Source it → target nl.
-   - mode "en-it": en ↔ it. Source en → target it. Source it → target en.
-   - mode "nl-en": nl ↔ en. Source nl → target en. Source en → target nl.
-3. If the detected source language doesn't match either language in the pair, pick the closer match and translate to the other.
-4. Translate naturally — preserve tone, use everyday conversational vocabulary suitable for a child.
-5. Do NOT add explanations, greetings, or extra words — only the translation itself.
-6. Preserve proper nouns and numbers unchanged.
-7. Return ONLY valid JSON in this exact format (no markdown, no code fences):
+1. For bidirectional modes: detect the actual source language from the text itself (trust the text over the engine hint) and translate to the other language in the pair.
+2. For fixed-direction modes: even if the speech engine says the input was another language, translate the transcribed text as if it were the stated source language. Force the direction exactly as specified.
+3. Translate naturally — preserve tone, use everyday conversational vocabulary suitable for a child.
+4. Do NOT add explanations, greetings, or extra words — only the translation itself.
+5. Preserve proper nouns and numbers unchanged.
+6. Return ONLY valid JSON in this exact format (no markdown, no code fences):
 
 {"sourceLang":"nl","targetLang":"it","translatedText":"..."}
 
@@ -51,10 +60,33 @@ function parseTranslateResponse(raw: string): TranslateResult {
   return parsed;
 }
 
-type TranslateMode = "nl-it" | "en-it" | "nl-en";
+type TranslateMode =
+  | "nl-it"
+  | "en-it"
+  | "nl-en"
+  | "en-to-it"
+  | "it-to-nl"
+  | "it-to-en"
+  | "nl-to-it"
+  | "nl-to-en"
+  | "en-to-nl";
+
+const VALID_MODES: TranslateMode[] = [
+  "nl-it",
+  "en-it",
+  "nl-en",
+  "en-to-it",
+  "it-to-nl",
+  "it-to-en",
+  "nl-to-it",
+  "nl-to-en",
+  "en-to-nl",
+];
 
 function parseMode(raw: unknown): TranslateMode {
-  if (raw === "en-it" || raw === "nl-en") return raw;
+  if (typeof raw === "string" && (VALID_MODES as string[]).includes(raw)) {
+    return raw as TranslateMode;
+  }
   // Legacy support: primaryLanguage="en" → en-it, otherwise nl-it
   if (raw === "en") return "en-it";
   return "nl-it";

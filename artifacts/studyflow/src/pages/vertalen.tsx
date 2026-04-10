@@ -36,12 +36,27 @@ const LANG_LABELS: Record<Lang, string> = {
   it: "Italiano",
 };
 
-type TranslateMode = "nl-it" | "en-it" | "nl-en";
+type TranslateMode =
+  | "nl-it"
+  | "en-it"
+  | "nl-en"
+  | "en-to-it"
+  | "it-to-nl"
+  | "it-to-en"
+  | "nl-to-it"
+  | "nl-to-en"
+  | "en-to-nl";
 
 const MODE_LABELS: Record<TranslateMode, string> = {
   "nl-it": "🇳🇱 NL ↔ 🇮🇹 IT",
   "en-it": "🇬🇧 EN ↔ 🇮🇹 IT",
   "nl-en": "🇳🇱 NL ↔ 🇬🇧 EN",
+  "en-to-it": "🇬🇧 EN → 🇮🇹 IT",
+  "it-to-nl": "🇮🇹 IT → 🇳🇱 NL",
+  "it-to-en": "🇮🇹 IT → 🇬🇧 EN",
+  "nl-to-it": "🇳🇱 NL → 🇮🇹 IT",
+  "nl-to-en": "🇳🇱 NL → 🇬🇧 EN",
+  "en-to-nl": "🇬🇧 EN → 🇳🇱 NL",
 };
 
 const STORAGE_KEY = "studyflow.vertalen.history";
@@ -85,7 +100,7 @@ export default function Vertalen() {
 
   const [mode, setMode] = useState<TranslateMode>(() => {
     const stored = localStorage.getItem(MODE_KEY);
-    if (stored === "nl-it" || stored === "en-it" || stored === "nl-en") return stored;
+    if (stored && stored in MODE_LABELS) return stored as TranslateMode;
     // Migrate from legacy primaryLang key
     const legacy = localStorage.getItem(PRIMARY_LANG_KEY);
     return legacy === "en" ? "en-it" : "nl-it";
@@ -358,9 +373,19 @@ export default function Vertalen() {
             onChange={(e) => setMode(e.target.value as TranslateMode)}
             aria-label="Talenpaar"
           >
-            <option value="nl-it">{MODE_LABELS["nl-it"]}</option>
-            <option value="en-it">{MODE_LABELS["en-it"]}</option>
-            <option value="nl-en">{MODE_LABELS["nl-en"]}</option>
+            <optgroup label="Auto-detecteer">
+              <option value="nl-it">{MODE_LABELS["nl-it"]}</option>
+              <option value="en-it">{MODE_LABELS["en-it"]}</option>
+              <option value="nl-en">{MODE_LABELS["nl-en"]}</option>
+            </optgroup>
+            <optgroup label="Vaste richting">
+              <option value="nl-to-it">{MODE_LABELS["nl-to-it"]}</option>
+              <option value="en-to-it">{MODE_LABELS["en-to-it"]}</option>
+              <option value="it-to-nl">{MODE_LABELS["it-to-nl"]}</option>
+              <option value="it-to-en">{MODE_LABELS["it-to-en"]}</option>
+              <option value="nl-to-en">{MODE_LABELS["nl-to-en"]}</option>
+              <option value="en-to-nl">{MODE_LABELS["en-to-nl"]}</option>
+            </optgroup>
           </select>
           {entries.length > 0 && (
             <Button
