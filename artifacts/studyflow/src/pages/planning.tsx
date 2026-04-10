@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation } from "wouter";
 import { format, parseISO, startOfWeek, endOfWeek, addDays, addWeeks, isSameDay } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useForm } from "react-hook-form";
@@ -15,7 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Calendar, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock,
-  Loader2, Plus, Sparkles, Target, Trash2,
+  Loader2, Plus, Sparkles, Target, Trash2, MessageCircle, Info,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpeechButton } from "@/components/speech-button";
@@ -65,6 +66,7 @@ function getEventColor(type: string) {
 
 export default function Planning() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [rescheduleMessage, setRescheduleMessage] = useState("");
@@ -105,6 +107,31 @@ export default function Planning() {
     },
   });
 
+  const openAddEventForDay = (day: Date) => {
+    eventForm.reset({
+      title: "",
+      type: "studie",
+      subject: "",
+      date: format(day, "yyyy-MM-dd"),
+      startTime: "15:30",
+      endTime: "17:00",
+    });
+    setAddEventOpen(true);
+  };
+
+  const extractErrorMessage = (error: unknown): string => {
+    if (!error) return "Onbekende fout";
+    if (error instanceof Error) return error.message;
+    const e = error as { response?: { data?: { error?: string; message?: string } }; message?: string; body?: string };
+    return (
+      e.response?.data?.error ||
+      e.response?.data?.message ||
+      e.message ||
+      e.body ||
+      "Onbekende fout"
+    );
+  };
+
   const onEventSubmit = (values: z.infer<typeof eventSchema>) => {
     const start = new Date(`${values.date}T${values.startTime}:00`);
     const end = new Date(`${values.date}T${values.endTime}:00`);
@@ -125,7 +152,12 @@ export default function Planning() {
           eventForm.reset();
           setAddEventOpen(false);
         },
-        onError: () => toast({ title: "Fout", variant: "destructive" }),
+        onError: (error) =>
+          toast({
+            title: "Fout bij toevoegen event",
+            description: extractErrorMessage(error),
+            variant: "destructive",
+          }),
       },
     );
   };
@@ -143,18 +175,38 @@ export default function Planning() {
   });
 
   const onGoalSubmit = (values: z.infer<typeof goalSchema>) => {
+    // Ensure hoursPerWeek is a number (coerced by zod) and targetDate is ISO
+    const payload = {
+      title: values.title,
+      subject: values.subject,
+      hoursPerWeek: Number(values.hoursPerWeek),
+      targetDate: new Date(values.targetDate).toISOString(),
+    };
     createGoal.mutate(
-      { data: values },
+      { data: payload },
       {
         onSuccess: () => {
-          toast({ title: "Doel toegevoegd" });
+          toast({
+            title: "Doel toegevoegd",
+            description: "Klik 'AI Plan' om studieblokken in te plannen voor dit doel.",
+          });
           goalForm.reset();
           setAddGoalOpen(false);
           refetchGoals();
         },
-        onError: () => toast({ title: "Fout", variant: "destructive" }),
+        onError: (error) =>
+          toast({
+            title: "Fout bij toevoegen doel",
+            description: extractErrorMessage(error),
+            variant: "destructive",
+          }),
       },
     );
+  };
+
+  const askCoachAboutGoal = (goal: { title: string; subject: string }) => {
+    const msg = `Help me met mijn studiedoel: "${goal.title}" (${goal.subject}). Geef me een concrete aanpak en stappen.`;
+    navigate(`/?chat=${encodeURIComponent(msg)}`);
   };
 
   // ─── AI Reschedule ─────────────────────────────────────────────────────
@@ -360,11 +412,22 @@ export default function Planning() {
                   const isToday = isSameDay(day, new Date());
 
                   return (
-                    <div key={day.toString()} className="space-y-2">
-                      <h4 className={`text-sm font-medium ${isToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
-                        {format(day, "EEEE d MMM", { locale: nl })}
-                        {isToday && <Badge variant="outline" className="ml-2 text-[10px]">Vandaag</Badge>}
-                      </h4>
+                    <div key={day.toString()} className="space-y-2 group">
+                      <div className="flex items-center justify-between">
+                        <h4 className={`text-sm font-medium ${isToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                          {format(day, "EEEE d MMM", { locale: nl })}
+                          {isToday && <Badge variant="outline" className="ml-2 text-[10px]">Vandaag</Badge>}
+                        </h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px] opacity-60 hover:opacity-100"
+                          onClick={() => openAddEventForDay(day)}
+                          aria-label={`Voeg item toe op ${format(day, "EEEE d MMM", { locale: nl })}`}
+                        >
+                          <Plus className="h-3 w-3 mr-0.5" /> Toevoegen
+                        </Button>
+                      </div>
                       {dayEvents.length > 0 ? (
                         <div className="space-y-1.5 pl-3 border-l-2 border-muted">
                           {dayEvents.map((event: { id: number; type: string; completed: boolean; title: string; startTime: string; endTime: string; subject?: string }) => (
@@ -405,7 +468,13 @@ export default function Planning() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground italic pl-5">Geen items</div>
+                        <button
+                          type="button"
+                          onClick={() => openAddEventForDay(day)}
+                          className="text-xs text-muted-foreground italic pl-5 hover:text-primary hover:underline text-left w-full py-1"
+                        >
+                          Geen items — klik om toe te voegen
+                        </button>
                       )}
                     </div>
                   );
@@ -483,6 +552,14 @@ export default function Planning() {
             </CardHeader>
             <ScrollArea className="flex-1">
               <CardContent className="p-4 space-y-3">
+                {goals.length > 0 && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-md bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground">
+                    <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                    <span>
+                      Je doelen worden meegenomen door de coach en bij <b>AI Plan</b> om studieblokken in te plannen.
+                    </span>
+                  </div>
+                )}
                 {goals.length > 0 ? (
                   goals.map((goal) => (
                     <div
@@ -532,6 +609,27 @@ export default function Planning() {
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
+                      {goal.status !== "voltooid" && (
+                        <div className="flex gap-1.5 mt-2 pt-2 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-7 text-[11px]"
+                            onClick={handleReschedule}
+                            disabled={isRescheduling}
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" /> Plan met AI
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-7 text-[11px]"
+                            onClick={() => askCoachAboutGoal(goal)}
+                          >
+                            <MessageCircle className="h-3 w-3 mr-1" /> Vraag coach
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))
                 ) : (
