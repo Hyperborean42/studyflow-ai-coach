@@ -66,8 +66,9 @@ const STT_LANG_CODES: Record<SupportedLang, string> = {
  * Transcribe audio using Google Cloud Speech-to-Text v2 with chirp_2 model.
  * Supports auto-language-detection across Dutch, English, and Italian.
  *
- * Accepts any browser-recorded audio format (webm/opus from Chrome,
- * mp4/aac from Safari) — v2 auto-decodes.
+ * Uses the europe-west4 regional endpoint because chirp_2 is only available
+ * at regional endpoints (not at global). Accepts any browser-recorded audio
+ * format (webm/opus from Chrome, mp4/aac from Safari) — v2 auto-decodes.
  */
 export async function speechToText(audioBuffer: Buffer): Promise<{
   text: string;
@@ -75,8 +76,9 @@ export async function speechToText(audioBuffer: Buffer): Promise<{
 }> {
   const token = await getAccessToken();
   const projectId = getProjectId();
+  const location = "europe-west4";
 
-  const url = `https://speech.googleapis.com/v2/projects/${projectId}/locations/global/recognizers/_:recognize`;
+  const url = `https://${location}-speech.googleapis.com/v2/projects/${projectId}/locations/${location}/recognizers/_:recognize`;
 
   const body = {
     config: {
@@ -102,7 +104,8 @@ export async function speechToText(audioBuffer: Buffer): Promise<{
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Speech-to-Text failed: ${res.status} ${errorText}`);
+    // Log single-line for easier log viewing
+    throw new Error(`Speech-to-Text failed: ${res.status} ${errorText.replace(/\s+/g, " ")}`);
   }
 
   const data = (await res.json()) as {
@@ -167,7 +170,7 @@ export async function textToSpeech(
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Text-to-Speech failed: ${res.status} ${errorText}`);
+    throw new Error(`Text-to-Speech failed: ${res.status} ${errorText.replace(/\s+/g, " ")}`);
   }
 
   const data = (await res.json()) as { audioContent: string };
