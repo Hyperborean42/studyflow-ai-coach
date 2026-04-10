@@ -36,8 +36,17 @@ const LANG_LABELS: Record<Lang, string> = {
   it: "Italiano",
 };
 
+type TranslateMode = "nl-it" | "en-it" | "nl-en";
+
+const MODE_LABELS: Record<TranslateMode, string> = {
+  "nl-it": "🇳🇱 NL ↔ 🇮🇹 IT",
+  "en-it": "🇬🇧 EN ↔ 🇮🇹 IT",
+  "nl-en": "🇳🇱 NL ↔ 🇬🇧 EN",
+};
+
 const STORAGE_KEY = "studyflow.vertalen.history";
-const PRIMARY_LANG_KEY = "studyflow.vertalen.primaryLang";
+const MODE_KEY = "studyflow.vertalen.mode";
+const PRIMARY_LANG_KEY = "studyflow.vertalen.primaryLang"; // legacy migration
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -74,9 +83,12 @@ export default function Vertalen() {
   const { data: settings } = useGetSettings();
   const autoPlayEnabled = settings?.voiceEnabled !== false; // default true if undefined
 
-  const [primaryLang, setPrimaryLang] = useState<"nl" | "en">(() => {
-    const stored = localStorage.getItem(PRIMARY_LANG_KEY);
-    return stored === "en" ? "en" : "nl";
+  const [mode, setMode] = useState<TranslateMode>(() => {
+    const stored = localStorage.getItem(MODE_KEY);
+    if (stored === "nl-it" || stored === "en-it" || stored === "nl-en") return stored;
+    // Migrate from legacy primaryLang key
+    const legacy = localStorage.getItem(PRIMARY_LANG_KEY);
+    return legacy === "en" ? "en-it" : "nl-it";
   });
 
   const [entries, setEntries] = useState<TranslationEntry[]>(() => loadHistory());
@@ -94,8 +106,8 @@ export default function Vertalen() {
   }, [entries]);
 
   useEffect(() => {
-    localStorage.setItem(PRIMARY_LANG_KEY, primaryLang);
-  }, [primaryLang]);
+    localStorage.setItem(MODE_KEY, mode);
+  }, [mode]);
 
   // Scroll to newest entry
   useEffect(() => {
@@ -175,7 +187,7 @@ export default function Vertalen() {
       const formData = new FormData();
       const ext = blob.type.includes("mp4") ? "mp4" : "webm";
       formData.append("audio", blob, `recording.${ext}`);
-      formData.append("primaryLanguage", primaryLang);
+      formData.append("mode", mode);
 
       const res = await fetch(import.meta.env.BASE_URL + "api/translate/speech", {
         method: "POST",
@@ -335,19 +347,20 @@ export default function Vertalen() {
             Vertaler
           </h1>
           <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">
-            Universele vertaler tussen {LANG_LABELS[primaryLang]} en Italiaans.
+            Universele spraak-vertaler.
           </p>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           <select
             className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background h-8"
-            value={primaryLang}
-            onChange={(e) => setPrimaryLang(e.target.value as "nl" | "en")}
-            aria-label="Mijn taal"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as TranslateMode)}
+            aria-label="Talenpaar"
           >
-            <option value="nl">🇳🇱 NL ↔ 🇮🇹 IT</option>
-            <option value="en">🇬🇧 EN ↔ 🇮🇹 IT</option>
+            <option value="nl-it">{MODE_LABELS["nl-it"]}</option>
+            <option value="en-it">{MODE_LABELS["en-it"]}</option>
+            <option value="nl-en">{MODE_LABELS["nl-en"]}</option>
           </select>
           {entries.length > 0 && (
             <Button

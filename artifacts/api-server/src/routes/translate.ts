@@ -10,14 +10,20 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
 });
 
-const TRANSLATE_SYSTEM_PROMPT = `You are a precise, context-aware translator for a bilingual child-friendly universal translator app.
+const TRANSLATE_SYSTEM_PROMPT = `You are a precise, context-aware translator for a child-friendly universal translator app.
 
-You will receive a transcribed phrase in Dutch, English, or Italian, plus the user's "primary language" (either "nl" or "en"), plus a hint about the language the speech engine detected.
+You will receive:
+- A transcribed phrase (language unknown, may be Dutch, English, or Italian)
+- A "mode" that defines the language pair: "nl-it", "en-it", or "nl-en"
+- A hint from the speech engine about the detected language (may be wrong)
 
 Your job:
-1. Detect the actual source language from the text itself (the engine hint may be wrong — trust the text). Source language must be "nl", "en", or "it".
-2. If source is "it" (Italian), the target is the user's primary language ("nl" or "en").
-3. Otherwise (source is "nl" or "en"), the target is "it" (Italian).
+1. Detect the actual source language from the text itself (trust the text over the engine hint). Must be "nl", "en", or "it".
+2. The target language is the OTHER language in the pair:
+   - mode "nl-it": nl ↔ it. Source nl → target it. Source it → target nl.
+   - mode "en-it": en ↔ it. Source en → target it. Source it → target en.
+   - mode "nl-en": nl ↔ en. Source nl → target en. Source en → target nl.
+3. If the detected source language doesn't match either language in the pair, pick the closer match and translate to the other.
 4. Translate naturally — preserve tone, use everyday conversational vocabulary suitable for a child.
 5. Do NOT add explanations, greetings, or extra words — only the translation itself.
 6. Preserve proper nouns and numbers unchanged.
@@ -45,6 +51,15 @@ function parseTranslateResponse(raw: string): TranslateResult {
   return parsed;
 }
 
+type TranslateMode = "nl-it" | "en-it" | "nl-en";
+
+function parseMode(raw: unknown): TranslateMode {
+  if (raw === "en-it" || raw === "nl-en") return raw;
+  // Legacy support: primaryLanguage="en" → en-it, otherwise nl-it
+  if (raw === "en") return "en-it";
+  return "nl-it";
+}
+
 router.post("/translate/speech", upload.single("audio"), async (req, res) => {
   const file = (req as unknown as { file?: Express.Multer.File }).file;
   if (!file) {
@@ -52,10 +67,11 @@ router.post("/translate/speech", upload.single("audio"), async (req, res) => {
     return;
   }
 
-  const primaryLanguage = (req.body?.primaryLanguage === "en" ? "en" : "nl") as "nl" | "en";
+  // Accept either `mode` (new) or `primaryLanguage` (legacy)
+  const mode: TranslateMode = parseMode(req.body?.mode ?? req.body?.primaryLanguage);
 
   try {
-    // Step 1: Speech-to-Text (Google Cloud Speech v2, chirp_2, multi-language)
+    // Step 1: Speech-to-Text (Google Cloud Speech v2, long model, multi-language)
     const { text: sourceText, detectedLanguage } = await speechToText(file.buffer);
     if (!sourceText) {
       res.status(422).json({ error: "Kon geen spraak herkennen in de opname. Probeer opnieuw." });
@@ -68,7 +84,7 @@ router.post("/translate/speech", upload.single("audio"), async (req, res) => {
       [
         {
           role: "user",
-          content: `User primary language: ${primaryLanguage}\nSpeech engine language hint: ${detectedLanguage || "unknown"}\n\nTranscribed phrase:\n${sourceText}`,
+          content: `Mode: ${mode}\nSpeech engine language hint: ${detectedLanguage || "unknown"}\n\nTranscribed phrase:\n${sourceText}`,
         },
       ],
       { json: true },

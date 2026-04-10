@@ -5,9 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Mic, Send, Loader2, Sparkles, Lightbulb, MessageSquare,
-  BookOpen, CalendarDays, BrainCircuit, RotateCcw,
+  BookOpen, CalendarDays, BrainCircuit, RotateCcw, Volume2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Markdown } from "@/components/markdown";
+import { speakCoachMessage } from "@/lib/speak-coach";
 import {
   useCreateOpenaiConversation,
   useListOpenaiConversations,
@@ -214,13 +216,39 @@ export default function Coaching() {
               <div className="space-y-4 pb-4">
                 {messages.map((msg, idx) => (
                   <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] p-3 rounded-lg ${
+                    <div className={`max-w-[85%] p-3 rounded-lg ${
                       msg.role === "user"
                         ? "bg-primary text-primary-foreground rounded-tr-none"
                         : "bg-muted/50 border rounded-tl-none"
                     }`}>
                       {msg.role === "assistant" && !msg.content ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : msg.role === "assistant" ? (
+                        <>
+                          <Markdown compact className="text-sm">{msg.content}</Markdown>
+                          {msg.content.length > 20 && (
+                            <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-[11px] text-muted-foreground hover:text-primary"
+                                onClick={async () => {
+                                  try {
+                                    await speakCoachMessage(msg.content);
+                                  } catch (err) {
+                                    toast({
+                                      title: "Voorlezen mislukt",
+                                      description: err instanceof Error ? err.message : "Probeer opnieuw.",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                <Volume2 className="h-3 w-3 mr-1" /> Luister
+                              </Button>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                       )}

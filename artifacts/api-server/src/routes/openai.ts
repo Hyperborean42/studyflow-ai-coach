@@ -190,6 +190,14 @@ router.get("/openai/conversations/:id", async (req, res) => {
   res.json({ ...conv[0], messages: msgs });
 });
 
+// Bulk delete — removes ALL conversations and all their messages.
+// Must be declared before the /:id variant so Express doesn't treat "all" as an id.
+router.delete("/openai/conversations/all", async (_req, res) => {
+  await db.delete(messages);
+  const deleted = await db.delete(conversations).returning({ id: conversations.id });
+  res.json({ deletedCount: deleted.length });
+});
+
 router.delete("/openai/conversations/:id", async (req, res) => {
   const { id } = DeleteOpenaiConversationParams.parse({ id: Number(req.params.id) });
   await db.delete(messages).where(eq(messages.conversationId, id));

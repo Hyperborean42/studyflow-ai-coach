@@ -8,6 +8,7 @@ import progressRouter from "./progress";
 import settingsRouter from "./settingsRoutes";
 import agentRouter from "./agent";
 import translateRouter from "./translate";
+import coachRouter from "./coach";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(progressRouter);
 router.use(settingsRouter);
 router.use(agentRouter);
 router.use(translateRouter);
+router.use(coachRouter);
 
 export default router;

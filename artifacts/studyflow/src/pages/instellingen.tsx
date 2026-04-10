@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Bell, User, Volume2, Loader2, Save } from "lucide-react";
+import { Bell, User, Volume2, Loader2, Save, Trash2, MessageCircle } from "lucide-react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { 
   useGetSettings,
@@ -33,9 +34,34 @@ const notificationSchema = z.object({
 
 export default function Instellingen() {
   const { toast } = useToast();
-  
+  const [isPurging, setIsPurging] = useState(false);
+
   const { data: settings, isLoading: loadingSettings } = useGetSettings();
   const updateSettings = useUpdateSettings();
+
+  const handlePurgeConversations = async () => {
+    if (!confirm("Weet je zeker dat je ALLE AI gesprekken wilt verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
+    setIsPurging(true);
+    try {
+      const res = await fetch(import.meta.env.BASE_URL + "api/openai/conversations/all", {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Verwijderen mislukt");
+      const data = await res.json();
+      toast({
+        title: "Gesprekken verwijderd",
+        description: `${data.deletedCount ?? 0} gesprekken zijn gewist.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Fout",
+        description: err instanceof Error ? err.message : "Kon gesprekken niet verwijderen.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurging(false);
+    }
+  };
   
   const { data: notifSettings, isLoading: loadingNotifs } = useGetNotificationSettings();
   const updateNotifs = useUpdateNotificationSettings();
@@ -325,6 +351,37 @@ export default function Instellingen() {
               </div>
             </form>
           </Form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-primary" />
+            Gegevens beheren
+          </CardTitle>
+          <CardDescription>Wis opgeslagen AI gesprekken als je opnieuw wilt beginnen.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border bg-destructive/5">
+            <div>
+              <p className="text-sm font-medium">Alle AI gesprekken verwijderen</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Verwijdert al je coach-gesprekken en berichten. Studiedoelen, planning en
+                materialen blijven bewaard.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handlePurgeConversations}
+              disabled={isPurging}
+              className="gap-2 shrink-0"
+            >
+              {isPurging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Wis gesprekken
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

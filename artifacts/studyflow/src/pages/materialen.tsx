@@ -27,6 +27,7 @@ import {
   type Quiz
 } from "@workspace/api-client-react";
 import { Trash2 } from "lucide-react";
+import { Markdown } from "@/components/markdown";
 import { streamOpenAiResponse } from "@/lib/api-streaming";
 
 const uploadSchema = z.object({
@@ -622,9 +623,7 @@ export default function Materialen() {
                         </CardHeader>
                         <CardContent>
                           {summary || activeMaterial.summary ? (
-                            <div className="prose prose-sm dark:prose-invert max-w-none">
-                              <div>{summary || activeMaterial.summary || ""}</div>
-                            </div>
+                            <Markdown>{summary || activeMaterial.summary || ""}</Markdown>
                           ) : (
                             <div className="text-center py-8">
                               <p className="text-muted-foreground mb-4">Laat de AI de belangrijkste kernconcepten voor je uithalen.</p>
@@ -804,7 +803,11 @@ export default function Materialen() {
                               <span>{correctCount} goed beantwoord</span>
                             </div>
                           </div>
-                          <CardTitle className="text-2xl leading-snug">{currentQuestion.question}</CardTitle>
+                          <CardTitle className="text-xl md:text-2xl leading-snug">
+                            <Markdown compact className="prose-p:m-0 [&>p]:inline">
+                              {currentQuestion.question}
+                            </Markdown>
+                          </CardTitle>
                           <CardDescription>
                             Kies het beste antwoord en controleer pas daarna.
                           </CardDescription>

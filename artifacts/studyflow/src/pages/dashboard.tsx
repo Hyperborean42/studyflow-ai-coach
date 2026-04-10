@@ -21,8 +21,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import {
   Send, Lightbulb, Loader2, Sparkles, Maximize2,
   MessageSquare, ArrowRight, AlertTriangle, Clock,
-  Flame, Target, GraduationCap, ChevronRight, Circle, CheckCircle2,
+  Flame, Target, GraduationCap, ChevronRight, Circle, CheckCircle2, Volume2,
 } from "lucide-react";
+import { Markdown } from "@/components/markdown";
+import { speakCoachMessage } from "@/lib/speak-coach";
 import { useToast } from "@/hooks/use-toast";
 import { SpeechButton } from "@/components/speech-button";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -465,6 +467,32 @@ export default function Dashboard() {
                   }`}>
                     {msg.role === "assistant" && !msg.content ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : msg.role === "assistant" ? (
+                      <>
+                        <Markdown compact className="text-sm">{msg.content}</Markdown>
+                        {msg.content.length > 20 && (
+                          <div className="mt-1.5 pt-1.5 border-t border-border/50 flex items-center justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 text-[10px] text-muted-foreground hover:text-primary"
+                              onClick={async () => {
+                                try {
+                                  await speakCoachMessage(msg.content);
+                                } catch (err) {
+                                  toast({
+                                    title: "Voorlezen mislukt",
+                                    description: err instanceof Error ? err.message : "Probeer opnieuw.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              <Volume2 className="h-3 w-3 mr-1" /> Luister
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                     )}
@@ -573,13 +601,39 @@ export default function Dashboard() {
             <div className="space-y-4 pb-4">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] p-3 rounded-lg ${
+                  <div className={`max-w-[85%] p-3 rounded-lg ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground rounded-tr-none"
                       : "bg-muted/50 border rounded-tl-none"
                   }`}>
                     {msg.role === "assistant" && !msg.content ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : msg.role === "assistant" ? (
+                      <>
+                        <Markdown compact className="text-sm">{msg.content}</Markdown>
+                        {msg.content.length > 20 && (
+                          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[11px] text-muted-foreground hover:text-primary"
+                              onClick={async () => {
+                                try {
+                                  await speakCoachMessage(msg.content);
+                                } catch (err) {
+                                  toast({
+                                    title: "Voorlezen mislukt",
+                                    description: err instanceof Error ? err.message : "Probeer opnieuw.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              <Volume2 className="h-3 w-3 mr-1" /> Luister
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                     )}
