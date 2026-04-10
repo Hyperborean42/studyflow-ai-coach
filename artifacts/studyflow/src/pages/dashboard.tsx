@@ -21,10 +21,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import {
   Send, Lightbulb, Loader2, Sparkles, Maximize2,
   MessageSquare, ArrowRight, AlertTriangle, Clock,
-  Flame, Target, GraduationCap, ChevronRight, Circle, CheckCircle2, Volume2,
+  Flame, Target, GraduationCap, ChevronRight, Circle, CheckCircle2,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
-import { speakCoachMessage } from "@/lib/speak-coach";
+import { CoachSpeakerButton } from "@/components/coach-speaker-button";
 import { useToast } from "@/hooks/use-toast";
 import { SpeechButton } from "@/components/speech-button";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -355,6 +355,33 @@ export default function Dashboard() {
     </Card>
   );
 
+  // "Help me plannen" CTA — the app's core USP. Prominent, always visible,
+  // opens the coach in expanded mode and auto-sends the planning request.
+  const planCta = (
+    <button
+      type="button"
+      onClick={() => {
+        setCoachExpanded(true);
+        handleSendMessage("Help me mijn week plannen op basis van mijn toetsen, doelen en materiaal. Maak een concreet voorstel.");
+      }}
+      disabled={isTyping}
+      className="group w-full rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-background p-3 md:p-4 text-left transition-all duration-150 hover:border-primary/60 hover:shadow-md active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+          <Sparkles className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm md:text-base font-semibold">Help me plannen</p>
+          <p className="text-[11px] md:text-xs text-muted-foreground">
+            Laat de coach een studieplan voor deze week maken
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground group-hover:text-primary shrink-0" />
+      </div>
+    </button>
+  );
+
   // Quick stats bar — compact
   const statsBar = (
     <div className="grid grid-cols-3 gap-2">
@@ -441,7 +468,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Lightbulb className="h-4 w-4 text-primary" />
-            AI Studiecoach
+            Je studiecoach
           </CardTitle>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCoachExpanded(true)}>
             <Maximize2 className="h-3.5 w-3.5" />
@@ -472,24 +499,11 @@ export default function Dashboard() {
                         <Markdown compact className="text-sm">{msg.content}</Markdown>
                         {msg.content.length > 20 && (
                           <div className="mt-1.5 pt-1.5 border-t border-border/50 flex items-center justify-end">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-5 text-[10px] text-muted-foreground hover:text-primary"
-                              onClick={async () => {
-                                try {
-                                  await speakCoachMessage(msg.content);
-                                } catch (err) {
-                                  toast({
-                                    title: "Voorlezen mislukt",
-                                    description: err instanceof Error ? err.message : "Probeer opnieuw.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                            >
-                              <Volume2 className="h-3 w-3 mr-1" /> Luister
-                            </Button>
+                            <CoachSpeakerButton
+                              messageKey={`dashboard-mini-${idx}`}
+                              text={msg.content}
+                              compact
+                            />
                           </div>
                         )}
                       </>
@@ -588,7 +602,7 @@ export default function Dashboard() {
         <SheetHeader className="px-4 pt-4 pb-2 border-b bg-primary/5">
           <SheetTitle className="flex items-center gap-2">
             <Lightbulb className="h-5 w-5 text-primary" />
-            AI Studiecoach
+            Je studiecoach
           </SheetTitle>
         </SheetHeader>
         <ScrollArea className="flex-1 p-4">
@@ -613,24 +627,10 @@ export default function Dashboard() {
                         <Markdown compact className="text-sm">{msg.content}</Markdown>
                         {msg.content.length > 20 && (
                           <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-[11px] text-muted-foreground hover:text-primary"
-                              onClick={async () => {
-                                try {
-                                  await speakCoachMessage(msg.content);
-                                } catch (err) {
-                                  toast({
-                                    title: "Voorlezen mislukt",
-                                    description: err instanceof Error ? err.message : "Probeer opnieuw.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                            >
-                              <Volume2 className="h-3 w-3 mr-1" /> Luister
-                            </Button>
+                            <CoachSpeakerButton
+                              messageKey={`dashboard-expanded-${idx}`}
+                              text={msg.content}
+                            />
                           </div>
                         )}
                       </>
@@ -706,6 +706,8 @@ export default function Dashboard() {
 
         {statsBar}
 
+        {planCta}
+
         <div className="grid grid-cols-2 gap-2">
           <div className="col-span-1">{todayAgenda}</div>
           <div className="col-span-1">{examsSection}</div>
@@ -729,6 +731,7 @@ export default function Dashboard() {
       </header>
 
       {statsBar}
+      {planCta}
       {suggestionsPanel}
 
       <div className="flex-1 grid grid-cols-12 gap-5 min-h-0 overflow-hidden">

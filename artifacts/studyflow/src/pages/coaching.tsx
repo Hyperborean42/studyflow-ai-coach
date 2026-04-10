@@ -6,11 +6,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Mic, Send, Loader2, Sparkles, Lightbulb, MessageSquare,
-  BookOpen, CalendarDays, BrainCircuit, RotateCcw, Volume2,
+  BookOpen, CalendarDays, BrainCircuit, RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Markdown } from "@/components/markdown";
-import { speakCoachMessage } from "@/lib/speak-coach";
+import { CoachSpeakerButton } from "@/components/coach-speaker-button";
 import {
   useCreateOpenaiConversation,
   useListOpenaiConversations,
@@ -188,7 +188,7 @@ export default function Coaching() {
         <div className="min-w-0">
           <h1 className="text-xl md:text-3xl font-bold flex items-center gap-2">
             <Lightbulb className="h-5 w-5 md:h-7 md:w-7 text-primary" />
-            AI Studiecoach
+            Je studiecoach
           </h1>
           <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">
             Je persoonlijke coach die je materiaal kent, je planning begrijpt, en je helpt studeren.
@@ -240,25 +240,48 @@ export default function Coaching() {
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           <ScrollArea className="flex-1 p-4">
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-4 md:p-8">
+              <div className="h-full flex flex-col items-center justify-center text-center p-4 md:p-8 max-w-xl mx-auto">
                 <MessageSquare className="h-8 w-8 md:h-12 md:w-12 text-muted-foreground/20 mb-3" />
                 <h3 className="text-base md:text-lg font-medium mb-1">Hoi! Ik ben je studiecoach.</h3>
-                <p className="text-xs md:text-sm text-muted-foreground mb-4 max-w-md">
-                  Vraag me om hulp met studeren, planning of een quiz!
+                <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                  Ik denk actief mee over je planning en studiestof. Waar wil je mee beginnen?
                 </p>
-                <div className="grid grid-cols-3 gap-1.5 md:gap-2 max-w-lg">
-                  {quickActions.map((action) => (
-                    <Button
-                      key={action.label}
-                      variant="outline"
-                      size="sm"
-                      className="text-[11px] md:text-xs h-auto py-1.5 px-2 md:py-2 md:px-3 flex flex-col items-center gap-0.5"
-                      onClick={() => handleSendMessage(action.msg)}
-                    >
-                      <action.icon className="h-3.5 w-3.5 text-primary" />
-                      {action.label}
-                    </Button>
-                  ))}
+
+                {/* Prominent "Plan mijn week" CTA */}
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage("Help me mijn week plannen op basis van mijn toetsen, doelen en materiaal. Maak een concreet voorstel.")}
+                  className="group w-full rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-background p-3 md:p-4 text-left transition-all hover:border-primary/60 hover:shadow-md active:scale-[0.99] mb-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+                      <CalendarDays className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm md:text-base font-semibold">Plan mijn week</p>
+                      <p className="text-[11px] md:text-xs text-muted-foreground">
+                        Ik maak een concreet studieplan op basis van je toetsen en doelen
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Secondary quick actions */}
+                <div className="grid grid-cols-3 gap-1.5 md:gap-2 w-full">
+                  {quickActions
+                    .filter((a) => a.label !== "Plan mijn week")
+                    .map((action) => (
+                      <Button
+                        key={action.label}
+                        variant="outline"
+                        size="sm"
+                        className="text-[11px] md:text-xs h-auto py-1.5 px-2 md:py-2 md:px-3 flex flex-col items-center gap-0.5"
+                        onClick={() => handleSendMessage(action.msg)}
+                      >
+                        <action.icon className="h-3.5 w-3.5 text-primary" />
+                        {action.label}
+                      </Button>
+                    ))}
                 </div>
               </div>
             ) : (
@@ -277,24 +300,10 @@ export default function Coaching() {
                           <Markdown compact className="text-sm">{msg.content}</Markdown>
                           {msg.content.length > 20 && (
                             <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-[11px] text-muted-foreground hover:text-primary"
-                                onClick={async () => {
-                                  try {
-                                    await speakCoachMessage(msg.content);
-                                  } catch (err) {
-                                    toast({
-                                      title: "Voorlezen mislukt",
-                                      description: err instanceof Error ? err.message : "Probeer opnieuw.",
-                                      variant: "destructive",
-                                    });
-                                  }
-                                }}
-                              >
-                                <Volume2 className="h-3 w-3 mr-1" /> Luister
-                              </Button>
+                              <CoachSpeakerButton
+                                messageKey={`coaching-${idx}`}
+                                text={msg.content}
+                              />
                             </div>
                           )}
                         </>
