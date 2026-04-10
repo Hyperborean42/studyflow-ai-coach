@@ -6,11 +6,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Mic, Send, Loader2, Sparkles, Lightbulb, MessageSquare,
-  BookOpen, CalendarDays, BrainCircuit, RotateCcw,
+  BookOpen, CalendarDays, BrainCircuit, RotateCcw, Volume2, VolumeX,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Markdown } from "@/components/markdown";
 import { CoachSpeakerButton } from "@/components/coach-speaker-button";
+import { CoachAudioBar } from "@/components/coach-audio-bar";
+import { speakCoachMessage } from "@/lib/speak-coach";
+
+const AUTOPLAY_KEY = "studyflow.coach.autoplay";
+
+// Progressive disclosure threshold — responses longer than this get truncated
+// with a "Lees meer" affordance so the user can skim and listen.
+const LONG_RESPONSE_WORDS = 120;
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function truncateToSentences(text: string, maxSentences = 3): string {
+  // Split on sentence terminators while keeping them
+  const parts = text.match(/[^.!?]+[.!?]+(\s|$)/g) || [text];
+  return parts.slice(0, maxSentences).join("").trim();
+}
 import {
   useCreateOpenaiConversation,
   useListOpenaiConversations,
@@ -27,7 +45,25 @@ export default function Coaching() {
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
+  const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
+  const [autoPlay, setAutoPlay] = useState<boolean>(() => {
+    const stored = localStorage.getItem(AUTOPLAY_KEY);
+    return stored === null ? true : stored === "true";
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem(AUTOPLAY_KEY, String(autoPlay));
+  }, [autoPlay]);
+
+  const toggleExpanded = (idx: number) => {
+    setExpandedMessages((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
 
   const { data: conversations = [], refetch: refetchConversations } = useListOpenaiConversations();
   const createConversation = useCreateOpenaiConversation();
@@ -94,6 +130,17 @@ export default function Coaching() {
           });
         },
       );
+
+      // Auto-play the finished response if enabled
+      if (autoPlay && aiResponse.trim().length > 20) {
+        // Use a stable key for auto-play so the speaker button state stays in sync
+        const msgKey = `coaching-autoplay-${Date.now()}`;
+        try {
+          await speakCoachMessage(aiResponse, { key: msgKey });
+        } catch {
+          /* silent — speaker button is still available as fallback */
+        }
+      }
     } catch {
       toast({ title: "Fout", description: "Kon bericht niet verzenden", variant: "destructive" });
     } finally {
@@ -182,22 +229,32 @@ export default function Coaching() {
   ];
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between mb-2 md:mb-4">
-        <div className="min-w-0">
-          <h1 className="text-xl md:text-3xl font-bold flex items-center gap-2">
-            <Lightbulb className="h-5 w-5 md:h-7 md:w-7 text-primary" />
-            Je studiecoach
-          </h1>
-          <p className="text-muted-foreground text-xs md:text-sm mt-0.5 hidden md:block">
-            Je persoonlijke coach die je materiaal kent, je planning begrijpt, en je helpt studeren.
-          </p>
+    <div className="h-full flex flex-col -mx-3 md:mx-0">
+      {/* Header — compact on mobile */}
+      <header className="flex items-center justify-between mb-2 md:mb-4 px-3 md:px-0">
+        <div className="min-w-0 flex items-center gap-2">
+          <Lightbulb className="h-5 w-5 md:h-7 md:w-7 text-primary shrink-0" />
+          <h1 className="text-base md:text-3xl font-bold truncate">Je studiecoach</h1>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Auto-play toggle */}
+          <Button
+            variant={autoPlay ? "secondary" : "outline"}
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => setAutoPlay((v) => !v)}
+            title={autoPlay ? "Auto-voorlezen aan" : "Auto-voorlezen uit"}
+            aria-label={autoPlay ? "Zet auto-voorlezen uit" : "Zet auto-voorlezen aan"}
+          >
+            {autoPlay ? (
+              <Volume2 className="h-4 w-4" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
           {conversations.length > 1 && (
             <select
-              className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background max-w-[120px] md:max-w-none"
+              className="text-xs md:text-sm border rounded-md px-2 py-1 bg-background max-w-[100px] md:max-w-none h-8"
               value={activeConversationId || ""}
               onChange={(e) => {
                 setActiveConversationId(Number(e.target.value));
@@ -210,9 +267,9 @@ export default function Coaching() {
               ))}
             </select>
           )}
-          <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleNewConversation}>
+          <Button variant="outline" size="sm" className="text-xs h-8 w-8 p-0 md:w-auto md:px-3" onClick={handleNewConversation} title="Nieuw gesprek">
             <RotateCcw className="h-3.5 w-3.5 md:mr-1" />
-            <span className="hidden md:inline">Nieuw gesprek</span>
+            <span className="hidden md:inline">Nieuw</span>
           </Button>
         </div>
       </header>
@@ -236,8 +293,12 @@ export default function Coaching() {
       )}
 
       {/* Chat area */}
-      <Card className="flex-1 flex flex-col overflow-hidden border-primary/20">
-        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+      <Card className="flex-1 flex flex-col overflow-hidden border-primary/20 rounded-none md:rounded-xl border-x-0 md:border-x">
+        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
+          {/* Sticky audio bar — always visible while coach audio is playing */}
+          <div className="px-3 pt-2">
+            <CoachAudioBar />
+          </div>
           <ScrollArea className="flex-1 p-4">
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-4 md:p-8 max-w-xl mx-auto">
@@ -285,34 +346,63 @@ export default function Coaching() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 pb-4">
-                {messages.map((msg, idx) => (
-                  <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] p-3 rounded-lg ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-tr-none"
-                        : "bg-muted/50 border rounded-tl-none"
-                    }`}>
-                      {msg.role === "assistant" && !msg.content ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : msg.role === "assistant" ? (
-                        <>
-                          <Markdown compact className="text-sm">{msg.content}</Markdown>
-                          {msg.content.length > 20 && (
-                            <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
-                              <CoachSpeakerButton
-                                messageKey={`coaching-${idx}`}
-                                text={msg.content}
-                              />
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-                      )}
+              <div className="space-y-5 pb-4 px-3 md:px-0">
+                {messages.map((msg, idx) => {
+                  if (msg.role === "user") {
+                    return (
+                      <div key={idx} className="flex justify-end">
+                        <div className="max-w-[85%] p-3 rounded-2xl bg-primary text-primary-foreground rounded-tr-sm">
+                          <div className="text-base md:text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (!msg.content) {
+                    return (
+                      <div key={idx} className="flex justify-start">
+                        <div className="p-3 rounded-2xl bg-muted/50 border rounded-tl-sm">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Assistant message with progressive disclosure
+                  const words = countWords(msg.content);
+                  const isLong = words > LONG_RESPONSE_WORDS;
+                  const isExpanded = expandedMessages.has(idx);
+                  const displayText = isLong && !isExpanded
+                    ? truncateToSentences(msg.content, 3)
+                    : msg.content;
+
+                  return (
+                    <div key={idx} className="flex justify-start">
+                      <div className="max-w-[92%] md:max-w-[85%] p-4 rounded-2xl bg-muted/50 border rounded-tl-sm">
+                        <Markdown compact className="text-base md:text-sm leading-relaxed">
+                          {displayText}
+                        </Markdown>
+                        {isLong && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-6 text-xs p-0 mt-1 text-primary"
+                            onClick={() => toggleExpanded(idx)}
+                          >
+                            {isExpanded ? "Minder tonen" : `Lees meer (${words} woorden)`}
+                          </Button>
+                        )}
+                        {msg.content.length > 20 && (
+                          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-end">
+                            <CoachSpeakerButton
+                              messageKey={`coaching-${idx}`}
+                              text={msg.content}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
             )}
